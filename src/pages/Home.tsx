@@ -37,9 +37,6 @@ export default function Home() {
             {/* Hero Section */}
             <section className="pt-32 pb-20 px-6">
                 <div className="max-w-5xl mx-auto text-center space-y-8">
-                    <div className="inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 border-transparent bg-primary text-primary-foreground hover:bg-primary/80">
-                        New: UI 4.0 Grading Scale Support
-                    </div>
                     <h1 className="text-5xl md:text-7xl font-extrabold tracking-tight">
                         Master Your <span className="text-primary">Academic Life</span>
                     </h1>

@@ -251,7 +251,7 @@ export default function Grades() {
                         <CardTitle>Performance Overview</CardTitle>
                     </CardHeader>
                     <CardContent className="pl-2">
-                        <div className="h-[300px] w-full mt-4">
+                        <div className="h-[300px] w-full mt-4 min-h-[300px]">
                             {grades.length > 0 ? (
                                 <ResponsiveContainer width="100%" height="100%">
                                     <BarChart data={chartData} margin={{ top: 20, right: 30, left: 0, bottom: 5 }}>
