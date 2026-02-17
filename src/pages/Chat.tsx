@@ -18,6 +18,7 @@ interface Message {
     userId: string;
     username: string;
     attachments?: string[]; // Array of file IDs
+    attachmentNames?: string[];
 }
 
 export default function Chat() {
@@ -104,6 +105,7 @@ export default function Chat() {
                     userId: user.$id,
                     username: user.name,
                     attachments: attachmentIds,
+                    attachmentNames: attachments.map(f => f.name),
                 },
                 [
                     Permission.read(Role.any()), // Public chat
@@ -170,7 +172,7 @@ export default function Chat() {
 
                                         {msg.attachments && msg.attachments.length > 0 && (
                                             <div className="mt-2 space-y-2">
-                                                {msg.attachments.map(fileId => (
+                                                {msg.attachments.map((fileId, index) => (
                                                     <a
                                                         key={fileId}
                                                         href={storage.getFileDownload(APPWRITE_CONFIG.BUCKET_ID, fileId).toString()}
@@ -179,7 +181,7 @@ export default function Chat() {
                                                         className="flex items-center gap-2 bg-background/20 p-2 rounded text-xs hover:bg-background/30 transition-colors"
                                                     >
                                                         <File className="h-4 w-4" />
-                                                        <span>Attachment</span>
+                                                        <span className="truncate max-w-[150px]">{msg.attachmentNames?.[index] || "Attachment"}</span>
                                                     </a>
                                                 ))}
                                             </div>
@@ -209,6 +211,7 @@ export default function Chat() {
                         <input
                             type="file"
                             multiple
+                            accept=".pdf,.doc,.docx,.txt,.jpg,.jpeg,.png"
                             className="hidden"
                             ref={fileInputRef}
                             onChange={handleFileSelect}

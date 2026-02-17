@@ -251,10 +251,10 @@ export default function Grades() {
                         <CardTitle>Performance Overview</CardTitle>
                     </CardHeader>
                     <CardContent className="pl-2">
-                        <div className="h-[200px] w-full">
+                        <div className="h-[300px] w-full mt-4">
                             {grades.length > 0 ? (
                                 <ResponsiveContainer width="100%" height="100%">
-                                    <BarChart data={chartData}>
+                                    <BarChart data={chartData} margin={{ top: 20, right: 30, left: 0, bottom: 5 }}>
                                         <XAxis
                                             dataKey="courseName"
                                             stroke="#888888"
@@ -272,18 +272,18 @@ export default function Grades() {
                                             ticks={[0, 1, 2, 3, 4, 5]}
                                         />
                                         <Tooltip
-                                            cursor={{ fill: 'transparent' }}
+                                            cursor={{ fill: 'rgba(0,0,0,0.1)' }}
                                             content={({ active, payload }) => {
                                                 if (active && payload && payload.length) {
                                                     const data = payload[0].payload;
                                                     return (
-                                                        <div className="rounded-lg border bg-background p-2 shadow-sm">
+                                                        <div className="rounded-lg border bg-popover p-2 shadow-md">
                                                             <div className="grid grid-cols-2 gap-2">
                                                                 <div className="flex flex-col">
                                                                     <span className="text-[0.70rem] uppercase text-muted-foreground">
                                                                         Grade
                                                                     </span>
-                                                                    <span className="font-bold text-muted-foreground">
+                                                                    <span className="font-bold text-popover-foreground">
                                                                         {data.grade}
                                                                     </span>
                                                                 </div>
@@ -291,8 +291,8 @@ export default function Grades() {
                                                                     <span className="text-[0.70rem] uppercase text-muted-foreground">
                                                                         Points
                                                                     </span>
-                                                                    <span className="font-bold">
-                                                                        {GRADE_POINTS[data.grade]}
+                                                                    <span className="font-bold text-popover-foreground">
+                                                                        {getGradePoints(data.grade)}
                                                                     </span>
                                                                 </div>
                                                             </div>
@@ -304,13 +304,14 @@ export default function Grades() {
                                         />
                                         <Bar
                                             dataKey="gradeValue"
-                                            fill="currentColor"
                                             radius={[4, 4, 0, 0]}
-                                            className="fill-primary"
                                         >
                                             {
                                                 chartData.map((entry, index) => (
-                                                    <Cell key={`cell-${index}`} fill={['A', 'B'].includes(entry.grade) ? '#22c55e' : ['C'].includes(entry.grade) ? '#eab308' : '#ef4444'} />
+                                                    <Cell
+                                                        key={`cell-${index}`}
+                                                        fill={['A', 'B'].includes(entry.grade) ? '#4ade80' : ['C'].includes(entry.grade) ? '#facc15' : '#f87171'}
+                                                    />
                                                 ))
                                             }
                                         </Bar>
