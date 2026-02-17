@@ -3,7 +3,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
-import { User, Bell, Shield, LogOut } from "lucide-react";
+import { User, Bell, Shield, LogOut, GraduationCap } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 export default function Settings() {
     const { user, logout } = useAuth();
@@ -36,6 +37,38 @@ export default function Settings() {
                         <div className="grid gap-2">
                             <Label>Email</Label>
                             <Input value={user?.email || ""} disabled />
+                        </div>
+                    </CardContent>
+                </Card>
+
+                <Card>
+                    <CardHeader>
+                        <div className="flex items-center gap-2">
+                            <GraduationCap className="h-5 w-5 text-primary" />
+                            <CardTitle>Academic Preferences</CardTitle>
+                        </div>
+                        <CardDescription>
+                            Configure your grading system.
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <div className="grid gap-2">
+                            <Label htmlFor="grading-scale">Grading Scale</Label>
+                            <Select
+                                value={localStorage.getItem("gradingScale") || "5.0"}
+                                onValueChange={(val) => {
+                                    localStorage.setItem("gradingScale", val);
+                                    window.location.reload(); // Simple reload to apply changes everywhere
+                                }}
+                            >
+                                <SelectTrigger className="w-[180px]">
+                                    <SelectValue placeholder="Select scale" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="5.0">5.0 Scale (General)</SelectItem>
+                                    <SelectItem value="4.0">4.0 Scale (UI Standard)</SelectItem>
+                                </SelectContent>
+                            </Select>
                         </div>
                     </CardContent>
                 </Card>

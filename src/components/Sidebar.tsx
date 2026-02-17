@@ -7,7 +7,8 @@ import {
     GraduationCap,
     MessageSquare,
     Settings,
-    LogOut
+    LogOut,
+    Calculator
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 
@@ -16,6 +17,7 @@ const sidebarItems = [
     { icon: CheckSquare, label: "Tasks", href: "/tasks" },
     { icon: Calendar, label: "Timetable", href: "/timetable" },
     { icon: GraduationCap, label: "Grades", href: "/grades" },
+    { icon: Calculator, label: "Calculator", href: "/calculator" },
     { icon: MessageSquare, label: "Chat", href: "/chat" },
     { icon: Settings, label: "Settings", href: "/settings" },
 ];

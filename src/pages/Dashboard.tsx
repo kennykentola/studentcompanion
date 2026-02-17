@@ -50,7 +50,9 @@ export default function Dashboard() {
                     APPWRITE_CONFIG.GRADES_COLLECTION_ID,
                     [Query.equal("userId", user.$id)]
                 );
-                const cgpa = calculateCGPA(gradesResponse.documents);
+
+                const scale = (localStorage.getItem("gradingScale") as '5.0' | '4.0') || '5.0';
+                const cgpa = calculateCGPA(gradesResponse.documents, scale);
 
                 // 3. Fetch Schedule for Today
                 // Note: Appwrite doesn't support complex substring matching easily on all fields, 

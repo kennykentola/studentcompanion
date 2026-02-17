@@ -113,6 +113,41 @@ export default function Grades() {
         }
     }
 
+    const [currentScale, setCurrentScale] = useState<'5.0' | '4.0'>('5.0');
+
+    useEffect(() => {
+        const scale = (localStorage.getItem("gradingScale") as '5.0' | '4.0') || '5.0';
+        setCurrentScale(scale);
+    }, []);
+
+    const getGradePoints = (grade: string) => {
+        const g = grade.toUpperCase();
+        if (currentScale === '5.0') {
+            switch (g) {
+                case "A": return 5;
+                case "B": return 4;
+                case "C": return 3;
+                case "D": return 2;
+                case "E": return 1;
+                case "F": return 0;
+                default: return 0;
+            }
+        } else {
+            // 4.0 UI Scale
+            switch (g) {
+                case "A": return 4;
+                case "B": return 3;
+                case "C": return 2;
+                case "D": return 1;
+                case "E": return 0;
+                case "F": return 0;
+                default: return 0;
+            }
+        }
+    };
+
+    // ... (fetchGrades remains same)
+
     const calculateCGPA = (): number => {
         if (grades.length === 0) return 0;
 
@@ -120,7 +155,7 @@ export default function Grades() {
         let totalUnits = 0;
 
         grades.forEach(g => {
-            const points = GRADE_POINTS[g.grade] || 0;
+            const points = getGradePoints(g.grade);
             totalPoints += points * g.creditUnits;
             totalUnits += g.creditUnits;
         });
@@ -130,7 +165,7 @@ export default function Grades() {
 
     const chartData = grades.map(g => ({
         ...g,
-        gradeValue: GRADE_POINTS[g.grade] || 0
+        gradeValue: getGradePoints(g.grade)
     }));
 
     if (loading) {

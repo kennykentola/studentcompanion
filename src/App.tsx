@@ -12,6 +12,7 @@ import Tasks from "@/pages/Tasks";
 import Timetable from "@/pages/Timetable";
 import Grades from "@/pages/Grades";
 import Chat from "@/pages/Chat";
+import Calculator from "@/pages/Calculator";
 import Settings from "@/pages/Settings";
 
 function App() {
@@ -30,6 +31,7 @@ function App() {
               <Route path="/timetable" element={<Timetable />} />
               <Route path="/grades" element={<Grades />} />
               <Route path="/chat" element={<Chat />} />
+              <Route path="/calculator" element={<Calculator />} />
               <Route path="/settings" element={<Settings />} />
             </Route>
           </Route>
