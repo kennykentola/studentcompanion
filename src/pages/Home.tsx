@@ -99,6 +99,36 @@ export default function Home() {
                 </div>
             </section>
 
+            {/* Testimonials Section */}
+            <section id="testimonials" className="py-20">
+                <div className="max-w-7xl mx-auto px-6">
+                    <div className="text-center mb-16">
+                        <h2 className="text-3xl font-bold tracking-tight mb-4">Loved by Students</h2>
+                        <p className="text-muted-foreground max-w-2xl mx-auto">
+                            Don't just take our word for it. Here's what students are saying about StudentCompanion.
+                        </p>
+                    </div>
+
+                    <div className="grid md:grid-cols-3 gap-8">
+                        <TestimonialCard
+                            name="Alex Johnston"
+                            role="Computer Science, Year 3"
+                            content="This app completely saved my semester. The grade tracking feature helped me realize I needed to pull up my socks in Algorithms, and I ended up properly balancing my study time."
+                        />
+                        <TestimonialCard
+                            name="Sarah Miller"
+                            role="Biology, Year 2"
+                            content="The timetable and task manager are lifesavers. I used to miss deadlines constantly, but now I get alerts for everything. Highly recommend!"
+                        />
+                        <TestimonialCard
+                            name="David Chen"
+                            role="Engineering, Year 4"
+                            content="I love how clean and fast the interface is. It doesn't get in the way, it just helps me stay organized. The dark mode is also really nice for late-night study sessions."
+                        />
+                    </div>
+                </div>
+            </section>
+
             {/* Social Proof / Stats */}
             <section className="py-20 border-y">
                 <div className="max-w-7xl mx-auto px-6 grid grid-cols-2 md:grid-cols-4 gap-8 text-center">
@@ -151,6 +181,27 @@ function FeatureCard({ icon: Icon, title, description }: { icon: any, title: str
             </div>
             <h3 className="text-xl font-bold mb-2">{title}</h3>
             <p className="text-muted-foreground">{description}</p>
+        </div>
+    )
+}
+
+
+
+function TestimonialCard({ name, role, content }: { name: string, role: string, content: string }) {
+    return (
+        <div className="p-6 rounded-xl border bg-card hover:shadow-lg transition-shadow flex flex-col h-full">
+            <div className="flex-1 mb-4">
+                <p className="text-muted-foreground italic">"{content}"</p>
+            </div>
+            <div className="flex items-center gap-3 mt-auto">
+                <div className="h-10 w-10 rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold">
+                    {name.charAt(0)}
+                </div>
+                <div>
+                    <h4 className="font-bold text-sm">{name}</h4>
+                    <p className="text-xs text-muted-foreground">{role}</p>
+                </div>
+            </div>
         </div>
     )
 }
