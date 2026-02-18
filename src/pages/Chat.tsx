@@ -235,8 +235,7 @@ const Communication: React.FC = () => {
                     title: newTask.title,
                     dueDate: newTask.dueDate,
                     priority: newTask.priority,
-                    status: 'todo',
-                    completed: false
+                    status: 'todo'
                 }
             );
             setTasks([response, ...tasks]);
