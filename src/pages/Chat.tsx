@@ -318,7 +318,12 @@ const Communication: React.FC = () => {
                 setAttachedFile(file);
             };
 
-            recorder.start();
+            recorder.onstop = () => {
+                const blob = new Blob(chunks, { type: 'audio/webm' });
+                // Using .wav extension to bypass Appwrite restriction, container is still webm
+                const file = new File([blob], "voice-note.wav", { type: 'audio/webm' });
+                setAttachedFile(file);
+            };
             setMediaRecorder(recorder);
             setIsRecording(true);
         } catch (err) {
@@ -378,7 +383,7 @@ const Communication: React.FC = () => {
     return (
         <div className="flex flex-col h-[100dvh] bg-slate-50 relative pb-safe">
             {/* Header */}
-            <div className="flex flex-col md:flex-row md:items-center justify-between px-4 py-3 md:px-6 md:py-4 bg-white border-b border-slate-200 shrink-0">
+            <div className="flex flex-col md:flex-row md:items-center justify-between px-4 py-3 md:px-6 md:py-4 bg-white/80 backdrop-blur-md border-b border-slate-200/50 sticky top-0 z-10 shrink-0">
                 <div className="mb-4 md:mb-0 flex items-center gap-3">
                     <button
                         onClick={() => setShowMobileSidebar(!showMobileSidebar)}
@@ -420,9 +425,10 @@ const Communication: React.FC = () => {
             </div>
 
             {/* Main Content */}
-            <div className="flex-1 overflow-hidden p-4 md:p-6">
+            {/* Main Content */}
+            <div className="flex-1 overflow-hidden p-0 md:p-6">
                 {activeTab === 'chats' ? (
-                    <div className="flex h-full bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+                    <div className="flex h-full bg-white md:rounded-2xl shadow-sm border-x-0 border-y-0 md:border border-slate-200 overflow-hidden">
                         {/* Sidebar (Optional/Collapsible) */}
                         <div className={`w-64 border-r border-slate-200 bg-slate-50 flex-col transition-all duration-300 ${showMobileSidebar ? 'fixed inset-0 z-50 flex shadow-2xl' : 'hidden md:flex'}`}>
                             {showMobileSidebar && (
@@ -451,9 +457,9 @@ const Communication: React.FC = () => {
                                 {messages.map((msg) => (
                                     <div key={msg.id} className={`flex ${msg.isMe ? 'justify-end' : 'justify-start'}`}>
                                         <div className={`max-w-[75%] md:max-w-[60%] flex flex-col ${msg.isMe ? 'items-end' : 'items-start'}`}>
-                                            <div className={`px-4 py-3 rounded-2xl text-sm ${msg.isMe
-                                                ? 'bg-indigo-600 text-white rounded-br-none'
-                                                : 'bg-slate-100 text-slate-800 rounded-bl-none'
+                                            <div className={`px-4 py-3 rounded-2xl text-sm shadow-sm ${msg.isMe
+                                                ? 'bg-gradient-to-r from-indigo-600 to-violet-600 text-white rounded-br-none'
+                                                : 'bg-white border border-slate-100 text-slate-800 rounded-bl-none'
                                                 }`}>
                                                 {msg.audioUrl ? (
                                                     <audio controls src={msg.audioUrl} className="h-8 w-48" />
@@ -488,7 +494,7 @@ const Communication: React.FC = () => {
                             </div>
 
                             {/* Input */}
-                            <div className="p-4 bg-white border-t border-slate-100">
+                            <div className="p-3 md:p-4 bg-white/80 backdrop-blur-md border-t border-slate-200/50">
                                 {attachedFile && (
                                     <div className="mb-2 px-4 py-2 bg-indigo-50 text-indigo-700 text-xs rounded-lg flex justify-between items-center">
                                         <span>Uploaded: {attachedFile.name}</span>
