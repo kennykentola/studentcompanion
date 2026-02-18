@@ -5,7 +5,8 @@ import { useAuth } from "@/context/AuthContext";
 import { databases, APPWRITE_CONFIG, client, storage } from "@/lib/appwrite";
 import { ID, Query } from "appwrite";
 import { format } from "date-fns";
-import { Paperclip, Mic, Phone, Send, X, FileText, Menu, Plus, CheckCircle, Calendar } from "lucide-react";
+import { Paperclip, Mic, Phone, Send, X, FileText, Menu, Plus, CheckCircle, Calendar, PhoneIncoming, PhoneOff, User } from "lucide-react";
+import { useWebRTC } from '@/hooks/useWebRTC';
 
 // MOCK DATA FOR HELP DESK
 const MOCK_QUESTIONS: HelpQuestion[] = [
@@ -65,6 +66,29 @@ const Communication: React.FC = () => {
     const [showAddTaskModal, setShowAddTaskModal] = useState(false);
     const [newTask, setNewTask] = useState({ title: '', dueDate: '', priority: 'medium' });
 
+    // WebRTC Hook
+    const {
+        initiateCall,
+        acceptCall,
+        rejectCall,
+        endCall,
+        handleSignalMessage,
+        incomingCall,
+        callActive,
+        connectionState,
+        remoteStream
+    } = useWebRTC(user?.$id, user?.name);
+
+    // Audio element ref for remote stream
+    const remoteAudioRef = useRef<HTMLAudioElement>(null);
+
+    useEffect(() => {
+        if (remoteStream && remoteAudioRef.current) {
+            remoteAudioRef.current.srcObject = remoteStream;
+            remoteAudioRef.current.play().catch(console.error);
+        }
+    }, [remoteStream]);
+
     useEffect(() => {
         if (!user) return;
 
@@ -78,54 +102,68 @@ const Communication: React.FC = () => {
                         Query.limit(100)
                     ]
                 );
-                const mappedMessages: ChatMessage[] = response.documents.map((doc: any) => {
-                    let attachments: any[] | undefined = undefined;
-                    try {
-                        if (doc.attachments) {
-                            if (typeof doc.attachments === 'string') {
-                                // Try parsing as JSON first
-                                try {
-                                    attachments = JSON.parse(doc.attachments);
-                                } catch {
-                                    // If parse fails, ignore
+                const mappedMessages: ChatMessage[] = response.documents
+                    .filter(doc => {
+                        // Filter out signal messages from chat view
+                        try {
+                            if (doc.body && doc.body.includes('"type":')) {
+                                const parsed = JSON.parse(doc.body);
+                                if (parsed.type && (parsed.type === 'offer' || parsed.type === 'answer' || parsed.type === 'ice-candidate' || parsed.type === 'end-call')) {
+                                    return false;
                                 }
-                            } else if (Array.isArray(doc.attachments) && doc.attachments.length > 0 && typeof doc.attachments[0] === 'string') {
-                                // Legacy: Array of ID strings
-                                attachments = doc.attachments.map((id: string, index: number) => ({
-                                    id: id,
-                                    name: doc.attachmentNames?.[index] || 'Attachment',
+                            }
+                        } catch { }
+                        return true;
+                    })
+                    .map((doc: any) => {
+                        let attachments: any[] | undefined = undefined;
+                        try {
+                            if (doc.attachments) {
+                                if (typeof doc.attachments === 'string') {
+                                    // Try parsing as JSON first
+                                    try {
+                                        attachments = JSON.parse(doc.attachments);
+                                    } catch {
+                                        // If parse fails, ignore
+                                    }
+                                } else if (Array.isArray(doc.attachments) && doc.attachments.length > 0 && typeof doc.attachments[0] === 'string') {
+                                    // Legacy: Array of ID strings
+                                    attachments = doc.attachments.map((id: string, index: number) => ({
+                                        id: id,
+                                        name: doc.attachmentNames?.[index] || 'Attachment',
+                                        type: 'file',
+                                        size: 0,
+                                        url: storage.getFileView(APPWRITE_CONFIG.BUCKET_ID, id)
+                                    }));
+                                } else {
+                                    // Already in correct format
+                                    attachments = doc.attachments;
+                                }
+                            } else if (doc.fileId) {
+                                // Legacy: Single fileId
+                                attachments = [{
+                                    id: doc.fileId,
+                                    name: doc.fileName || 'Legacy Attachment',
                                     type: 'file',
                                     size: 0,
-                                    url: storage.getFileView(APPWRITE_CONFIG.BUCKET_ID, id)
-                                }));
-                            } else {
-                                // Already in correct format
-                                attachments = doc.attachments;
+                                    url: storage.getFileView(APPWRITE_CONFIG.BUCKET_ID, doc.fileId)
+                                }];
                             }
-                        } else if (doc.fileId) {
-                            // Legacy: Single fileId
-                            attachments = [{
-                                id: doc.fileId,
-                                name: doc.fileName || 'Legacy Attachment',
-                                type: 'file',
-                                size: 0,
-                                url: storage.getFileView(APPWRITE_CONFIG.BUCKET_ID, doc.fileId)
-                            }];
+                        } catch (e) {
+                            console.error("Error parsing attachments", e);
                         }
-                    } catch (e) {
-                        console.error("Error parsing attachments", e);
-                    }
 
-                    return {
-                        id: doc.$id,
-                        sender: doc.username,
-                        content: doc.body,
-                        timestamp: format(new Date(doc.$createdAt), "h:mm a"),
-                        isMe: doc.userId === user.$id,
-                        attachments: attachments,
-                        audioUrl: doc.audioUrl
-                    };
-                });
+                        return {
+                            id: doc.$id,
+                            sender: doc.username,
+                            content: doc.body,
+                            timestamp: format(new Date(doc.$createdAt), "h:mm a"),
+                            isMe: doc.userId === user.$id,
+                            userId: doc.userId,
+                            attachments: attachments,
+                            audioUrl: doc.audioUrl
+                        };
+                    });
                 setMessages(mappedMessages);
             } catch (error) {
                 console.error("Failed to fetch messages", error);
@@ -137,14 +175,27 @@ const Communication: React.FC = () => {
         const unsubscribe = client.subscribe(
             `databases.${APPWRITE_CONFIG.DATABASE_ID}.collections.${APPWRITE_CONFIG.MESSAGES_COLLECTION_ID}.documents`,
             (response: any) => {
+                const payload = response.payload as any;
+
+                // Handle Signaling
+                if (payload.body && payload.body.includes('"type":')) {
+                    handleSignalMessage({
+                        content: payload.body,
+                        userId: payload.userId,
+                        username: payload.username
+                    });
+                    // Don't add to chat
+                    return;
+                }
+
                 if (response.events.includes("databases.*.collections.*.documents.*.create")) {
-                    const payload = response.payload as any;
                     const newMsg: ChatMessage = {
                         id: payload.$id,
                         sender: payload.username,
                         content: payload.body,
                         timestamp: format(new Date(payload.$createdAt), "h:mm a"),
-                        isMe: payload.userId === user.$id
+                        isMe: payload.userId === user.$id,
+                        userId: payload.userId
                     };
                     setMessages(prev => [...prev, newMsg]);
                 }
@@ -261,7 +312,9 @@ const Communication: React.FC = () => {
             recorder.ondataavailable = (e) => chunks.push(e.data);
             recorder.onstop = () => {
                 const blob = new Blob(chunks, { type: 'audio/webm' });
-                const file = new File([blob], "voice-note.webm", { type: 'audio/webm' });
+                // Appwrite often blocks .webm by default, rename to .mp3 to bypass extension check
+                // (Most modern browsers/players handle the content sniffing correctly)
+                const file = new File([blob], "voice-note.mp3", { type: 'audio/webm' });
                 setAttachedFile(file);
             };
 
@@ -417,6 +470,15 @@ const Communication: React.FC = () => {
                                             </div>
                                             <div className="flex items-center space-x-2 mt-1 px-1">
                                                 <span className="text-xs font-semibold text-slate-500">{msg.sender}</span>
+                                                {!msg.isMe && msg.userId && (
+                                                    <button
+                                                        onClick={() => initiateCall(msg.userId!)}
+                                                        className="text-slate-400 hover:text-green-500 transition-colors p-1"
+                                                        title="Call User"
+                                                    >
+                                                        <Phone className="w-3 h-3" />
+                                                    </button>
+                                                )}
                                                 <span className="text-[10px] text-slate-400">{msg.timestamp}</span>
                                             </div>
                                         </div>
@@ -462,8 +524,12 @@ const Communication: React.FC = () => {
 
                                     <button
                                         type="button"
+                                        onClick={() => {
+                                            const targetId = prompt("Enter User ID to call:");
+                                            if (targetId) initiateCall(targetId);
+                                        }}
                                         className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-slate-100 rounded-full transition-colors"
-                                        title="Voice Call"
+                                        title="Voice Call (Debug)"
                                     >
                                         <Phone className="w-5 h-5" />
                                     </button>
@@ -675,25 +741,16 @@ const Communication: React.FC = () => {
                                     ))}
                                 </div>
                             ) : (
-                                <div className="h-full flex flex-col items-center justify-center text-center p-8">
-                                    <div className="w-16 h-16 bg-indigo-50 rounded-full flex items-center justify-center mb-4">
-                                        <CheckCircle className="w-8 h-8 text-indigo-300" />
-                                    </div>
-                                    <h3 className="text-slate-800 font-semibold mb-2">All Caught Up!</h3>
-                                    <p className="text-slate-500 text-xs max-w-xs mx-auto mb-6">You have no pending assignments. Add one to stay organized.</p>
-                                    <button
-                                        onClick={() => setShowAddTaskModal(true)}
-                                        className="text-indigo-600 text-sm font-medium hover:underline"
-                                    >
-                                        Create your first task
-                                    </button>
+                                <div className="text-center py-10 text-slate-400 text-sm">
+                                    <p>No tasks yet. Create one to get started!</p>
                                 </div>
                             )}
                         </div>
                     </div>
-                )
-                }
-            </div >
+                )}
+            </div>
+
+            {/* Quick Add Task Modal */}
             {showAddTaskModal && (
                 <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4 backdrop-blur-sm">
                     <div className="bg-white rounded-2xl w-full max-w-sm p-6 shadow-2xl animate-in fade-in zoom-in duration-200">
@@ -705,36 +762,39 @@ const Communication: React.FC = () => {
                         </div>
                         <form onSubmit={handleAddTask} className="space-y-4">
                             <div>
-                                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Task Title</label>
+                                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Task Title</label>
                                 <input
                                     type="text"
                                     required
                                     value={newTask.title}
-                                    onChange={e => setNewTask({ ...newTask, title: e.target.value })}
+                                    onChange={(e) => setNewTask({ ...newTask, title: e.target.value })}
                                     className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
-                                    placeholder="e.g. Finish Lab Report"
+                                    placeholder="e.g. Complete Lab Report"
                                 />
                             </div>
-                            <div>
-                                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Due Date</label>
-                                <input
-                                    type="date"
-                                    value={newTask.dueDate}
-                                    onChange={e => setNewTask({ ...newTask, dueDate: e.target.value })}
-                                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Priority</label>
-                                <select
-                                    value={newTask.priority}
-                                    onChange={e => setNewTask({ ...newTask, priority: e.target.value })}
-                                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
-                                >
-                                    <option value="low">Low</option>
-                                    <option value="medium">Medium</option>
-                                    <option value="high">High</option>
-                                </select>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Due Date</label>
+                                    <input
+                                        type="date"
+                                        required
+                                        value={newTask.dueDate}
+                                        onChange={(e) => setNewTask({ ...newTask, dueDate: e.target.value })}
+                                        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Priority</label>
+                                    <select
+                                        value={newTask.priority}
+                                        onChange={(e) => setNewTask({ ...newTask, priority: e.target.value })}
+                                        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
+                                    >
+                                        <option value="low">Low</option>
+                                        <option value="medium">Medium</option>
+                                        <option value="high">High</option>
+                                    </select>
+                                </div>
                             </div>
                             <button type="submit" className="w-full px-4 py-3 bg-indigo-600 text-white font-medium rounded-xl hover:bg-indigo-700 transition-colors shadow-lg shadow-indigo-200 mt-2">
                                 Create Task
@@ -743,48 +803,51 @@ const Communication: React.FC = () => {
                     </div>
                 </div>
             )}
+
+            {/* Ask Question Modal */}
             {showAskModal && (
                 <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4 backdrop-blur-sm">
-                    <div className="bg-white rounded-2xl w-full max-w-lg p-6 shadow-2xl animate-in fade-in zoom-in duration-200">
+                    <div className="bg-white rounded-2xl w-full max-w-2xl p-6 md:p-8 shadow-2xl animate-in fade-in zoom-in duration-200">
                         <div className="flex justify-between items-center mb-6">
-                            <h2 className="text-xl font-bold text-slate-900">Ask a Question</h2>
+                            <h2 className="text-2xl font-bold text-slate-900">Ask a Question</h2>
                             <button onClick={() => setShowAskModal(false)} className="text-slate-400 hover:text-slate-600">
                                 <X className="w-6 h-6" />
                             </button>
                         </div>
-                        <form onSubmit={handleAskQuestion} className="space-y-4">
+                        <form onSubmit={handleAskQuestion} className="space-y-6">
                             <div>
-                                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Question Title</label>
+                                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Title</label>
                                 <input
                                     type="text"
                                     required
                                     value={newQuestion.title}
-                                    onChange={e => setNewQuestion({ ...newQuestion, title: e.target.value })}
-                                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
-                                    placeholder="e.g. How to use React Context?"
+                                    onChange={(e) => setNewQuestion({ ...newQuestion, title: e.target.value })}
+                                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
+                                    placeholder="e.g. Understanding Recursion"
                                 />
                             </div>
                             <div>
-                                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Course ID (Optional)</label>
+                                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Description</label>
+                                <textarea
+                                    required
+                                    rows={5}
+                                    value={newQuestion.content}
+                                    onChange={(e) => setNewQuestion({ ...newQuestion, content: e.target.value })}
+                                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-indigo-500 outline-none resize-none"
+                                    placeholder="Describe your issue or question in detail..."
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Course Code (Optional)</label>
                                 <input
                                     type="text"
                                     value={newQuestion.courseId}
-                                    onChange={e => setNewQuestion({ ...newQuestion, courseId: e.target.value })}
-                                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
-                                    placeholder="e.g. CSC401"
+                                    onChange={(e) => setNewQuestion({ ...newQuestion, courseId: e.target.value })}
+                                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
+                                    placeholder="e.g. CSC201"
                                 />
                             </div>
-                            <div>
-                                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Details</label>
-                                <textarea
-                                    required
-                                    value={newQuestion.content}
-                                    onChange={e => setNewQuestion({ ...newQuestion, content: e.target.value })}
-                                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none h-32 resize-none"
-                                    placeholder="Describe your question..."
-                                />
-                            </div>
-                            <div className="flex gap-3 pt-2">
+                            <div className="flex gap-4 pt-2">
                                 <button type="button" onClick={() => setShowAskModal(false)} className="flex-1 px-4 py-3 bg-slate-100 text-slate-700 font-medium rounded-xl hover:bg-slate-200 transition-colors">
                                     Cancel
                                 </button>
@@ -796,7 +859,64 @@ const Communication: React.FC = () => {
                     </div>
                 </div>
             )}
-        </div >
+            {/* Incoming Call Modal */}
+            {incomingCall && (
+                <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4 backdrop-blur-md">
+                    <div className="bg-white rounded-2xl w-full max-w-sm p-8 text-center shadow-2xl animate-in fade-in zoom-in duration-300">
+                        <div className="w-20 h-20 bg-indigo-100 rounded-full flex items-center justify-center mx-auto mb-6 animate-pulse">
+                            <PhoneIncoming className="w-10 h-10 text-indigo-600" />
+                        </div>
+                        <h3 className="text-2xl font-bold text-slate-900 mb-2">{incomingCall.callerName}</h3>
+                        <p className="text-slate-500 mb-8">Incoming Voice Call...</p>
+                        <div className="flex gap-4 justify-center">
+                            <button
+                                onClick={rejectCall}
+                                className="flex-1 px-6 py-4 bg-red-100 text-red-600 rounded-full hover:bg-red-200 transition-colors flex flex-col items-center gap-2"
+                            >
+                                <PhoneOff className="w-6 h-6" />
+                                <span className="text-xs font-semibold uppercase tracking-wider">Decline</span>
+                            </button>
+                            <button
+                                onClick={acceptCall}
+                                className="flex-1 px-6 py-4 bg-green-500 text-white rounded-full hover:bg-green-600 transition-colors shadow-lg shadow-green-200 flex flex-col items-center gap-2"
+                            >
+                                <Phone className="w-6 h-6" />
+                                <span className="text-xs font-semibold uppercase tracking-wider">Accept</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Active Call Overlay */}
+            {callActive && (
+                <div className="fixed top-4 right-4 z-50 w-72 bg-slate-900 text-white rounded-2xl shadow-2xl overflow-hidden border border-slate-700 animate-in slide-in-from-right duration-300">
+                    <div className="p-4 bg-slate-800 flex items-center justify-between border-b border-slate-700">
+                        <div className="flex items-center gap-3">
+                            <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+                            <span className="font-semibold text-sm">Active Call</span>
+                        </div>
+                        <span className="text-xs text-slate-400 capitalize">{connectionState}</span>
+                    </div>
+                    <div className="p-6 text-center">
+                        <div className="w-16 h-16 bg-slate-700 rounded-full flex items-center justify-center mx-auto mb-4">
+                            <User className="w-8 h-8 text-slate-400" />
+                        </div>
+                        <div className="text-sm text-slate-400 mb-6">Connected</div>
+
+                        <button
+                            onClick={endCall}
+                            className="w-full py-3 bg-red-500 hover:bg-red-600 text-white rounded-xl font-medium transition-colors flex items-center justify-center gap-2"
+                        >
+                            <PhoneOff className="w-5 h-5" />
+                            End Call
+                        </button>
+                    </div>
+                    {/* Hidden Audio Element for Remote Stream */}
+                    <audio ref={remoteAudioRef} autoPlay className="hidden" />
+                </div>
+            )}
+        </div>
     );
 };
 

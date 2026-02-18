@@ -42,6 +42,7 @@ export interface ChatMessage {
         url: string;
     }[];
     audioUrl?: string; // For voice notes
+    userId?: string;
 }
 
 export interface HelpAnswer {
@@ -63,4 +64,4 @@ export interface HelpQuestion {
     resolved: boolean;
     answers: HelpAnswer[];
 }
-// Forced Update 3
+
