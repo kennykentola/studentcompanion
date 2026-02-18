@@ -74,7 +74,7 @@ export default function Calculator() {
                         <CardDescription>Enter your courses, credit units, and grades.</CardDescription>
                     </CardHeader>
                     <CardContent>
-                        <div className="rounded-md border">
+                        <div className="rounded-md border overflow-x-auto">
                             <Table>
                                 <TableHeader>
                                     <TableRow>
@@ -152,7 +152,7 @@ export default function Calculator() {
                         </div>
                         <div className="mt-6 pt-4 text-center">
                             <span className="block text-sm text-muted-foreground mb-1">Your CGPA</span>
-                            <div className="text-5xl font-extrabold text-primary">{cgpa.toFixed(2)}</div>
+                            <div className="text-3xl md:text-5xl font-extrabold text-primary break-all">{cgpa.toFixed(2)}</div>
                         </div>
 
                         <Button

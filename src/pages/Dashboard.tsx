@@ -138,7 +138,7 @@ export default function Dashboard() {
                             <item.icon className={`h-4 w-4 ${item.color}`} />
                         </CardHeader>
                         <CardContent>
-                            <div className="text-2xl font-bold">{item.value}</div>
+                            <div className="text-2xl font-bold truncate">{item.value}</div>
                             <p className="text-xs text-muted-foreground">
                                 {item.description}
                             </p>
