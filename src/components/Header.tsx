@@ -12,7 +12,11 @@ import { databases, client, APPWRITE_CONFIG } from "@/lib/appwrite";
 import { Query } from "appwrite";
 import { format } from "date-fns";
 
-export function Header() {
+interface HeaderProps {
+    onMenuClick: () => void;
+}
+
+export function Header({ onMenuClick }: HeaderProps) {
     const { user } = useAuth();
     const [notifications, setNotifications] = useState<any[]>([]);
     const [unreadCount, setUnreadCount] = useState(0);
@@ -76,7 +80,7 @@ export function Header() {
     return (
         <header className="h-16 border-b bg-card flex items-center justify-between px-6 sticky top-0 z-10 md:pl-72">
             <div className="md:hidden">
-                <Button variant="ghost" size="icon">
+                <Button variant="ghost" size="icon" onClick={onMenuClick}>
                     <Menu className="h-5 w-5" />
                 </Button>
             </div>
