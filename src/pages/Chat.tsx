@@ -501,57 +501,64 @@ const Communication: React.FC = () => {
                                         <button onClick={() => setAttachedFile(null)}><X className="w-4 h-4" /></button>
                                     </div>
                                 )}
-                                <form onSubmit={handleSendMessage} className="flex gap-3 items-center">
+                                <form onSubmit={handleSendMessage} className="flex gap-2 items-center">
                                     <input
                                         type="file"
                                         ref={fileInputRef}
                                         onChange={handleFileUpload}
                                         className="hidden"
                                     />
-                                    <button
-                                        type="button"
-                                        onClick={() => fileInputRef.current?.click()}
-                                        className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-slate-100 rounded-full transition-colors"
-                                        title="Attach File"
-                                    >
-                                        <Paperclip className="w-5 h-5" />
-                                    </button>
 
-                                    <button
-                                        type="button"
-                                        onMouseDown={startRecording}
-                                        onMouseUp={stopRecording}
-                                        className={`p-2 rounded-full transition-colors ${isRecording ? 'text-red-600 bg-red-50 animate-pulse' : 'text-slate-400 hover:text-indigo-600 hover:bg-slate-100'
-                                            }`}
-                                        title="Hold to Record"
-                                    >
-                                        <Mic className="w-5 h-5" />
-                                    </button>
+                                    {/* Input Container with Internal Actions */}
+                                    <div className="flex-1 relative flex items-center">
+                                        <div className="absolute left-1.5 flex items-center gap-0.5 z-10">
+                                            <button
+                                                type="button"
+                                                onClick={() => fileInputRef.current?.click()}
+                                                className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-slate-200/50 rounded-full transition-colors"
+                                                title="Attach File"
+                                            >
+                                                <Paperclip className="w-4 h-4" />
+                                            </button>
 
-                                    <button
-                                        type="button"
-                                        onClick={() => {
-                                            const targetId = prompt("Enter User ID to call:");
-                                            if (targetId) initiateCall(targetId);
-                                        }}
-                                        className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-slate-100 rounded-full transition-colors"
-                                        title="Voice Call (Debug)"
-                                    >
-                                        <Phone className="w-5 h-5" />
-                                    </button>
+                                            <button
+                                                type="button"
+                                                onMouseDown={startRecording}
+                                                onMouseUp={stopRecording}
+                                                className={`p-1.5 rounded-full transition-colors ${isRecording ? 'text-red-600 bg-red-50 animate-pulse' : 'text-slate-400 hover:text-indigo-600 hover:bg-slate-200/50'
+                                                    }`}
+                                                title="Hold to Record"
+                                            >
+                                                <Mic className="w-4 h-4" />
+                                            </button>
 
-                                    <input
-                                        type="text"
-                                        value={newMessage}
-                                        onChange={(e) => setNewMessage(e.target.value)}
-                                        placeholder={isRecording ? "Recording..." : "Type a message..."}
-                                        className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all"
-                                        disabled={isRecording}
-                                    />
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    const targetId = prompt("Enter User ID to call:");
+                                                    if (targetId) initiateCall(targetId);
+                                                }}
+                                                className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-slate-200/50 rounded-full transition-colors"
+                                                title="Voice Call"
+                                            >
+                                                <Phone className="w-4 h-4" />
+                                            </button>
+                                        </div>
+
+                                        <input
+                                            type="text"
+                                            value={newMessage}
+                                            onChange={(e) => setNewMessage(e.target.value)}
+                                            placeholder={isRecording ? "Recording..." : "Type a message..."}
+                                            className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-24 pr-4 py-3 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all"
+                                            disabled={isRecording}
+                                        />
+                                    </div>
+
                                     <button
                                         type="submit"
                                         disabled={(!newMessage.trim() && !attachedFile) || isRecording}
-                                        className="bg-indigo-600 text-white p-3 rounded-xl hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                        className="bg-indigo-600 text-white p-3 rounded-xl hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-indigo-200"
                                         title="Send"
                                     >
                                         <Send className="w-5 h-5" />
