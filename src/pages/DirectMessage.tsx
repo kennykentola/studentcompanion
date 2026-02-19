@@ -110,7 +110,7 @@ export default function DirectMessage() {
                         fileId: payload.fileId,
                         fileName: payload.fileName
                     };
-                    setMessages(prev => [...prev, newMsg]);
+                    setMessages((prev: ChatMessage[]) => [...prev, newMsg]);
                 }
             }
         );
@@ -203,7 +203,7 @@ export default function DirectMessage() {
         if (mediaRecorder) {
             mediaRecorder.stop();
             setIsRecording(false);
-            mediaRecorder.stream.getTracks().forEach(track => track.stop());
+            mediaRecorder.stream.getTracks().forEach((track: MediaStreamTrack) => track.stop());
         }
     };
 
@@ -250,7 +250,7 @@ export default function DirectMessage() {
                         <p className="text-xs max-w-xs mt-1">Start a conversation with {targetUser?.nickname || 'your classmate'}!</p>
                     </div>
                 ) : (
-                    messages.map((msg) => (
+                    messages.map((msg: ChatMessage) => (
                         <div key={msg.id} className={`flex ${msg.isMe ? 'justify-end' : 'justify-start'}`}>
                             <div className={`max-w-[85%] md:max-w-[70%] rounded-2xl p-3 shadow-sm ${msg.isMe ? 'bg-indigo-600 text-white' : 'bg-white border border-slate-100 text-slate-800'}`}>
                                 {!msg.isMe && <div className="text-[10px] font-bold opacity-70 mb-1">{msg.sender}</div>}
