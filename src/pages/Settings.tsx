@@ -255,7 +255,7 @@ export default function Settings() {
                                     window.location.reload(); // Simple reload to apply changes everywhere
                                 }}
                             >
-                                <SelectTrigger className="w-[180px]">
+                                <SelectTrigger className="w-full sm:w-[180px]">
                                     <SelectValue placeholder="Select scale" />
                                 </SelectTrigger>
                                 <SelectContent>

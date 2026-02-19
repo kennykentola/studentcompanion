@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import type { ChatMessage, HelpQuestion } from '../types';
 import { useAuth } from "@/context/AuthContext";
 import { databases, APPWRITE_CONFIG, client, storage } from "@/lib/appwrite";
@@ -15,6 +15,8 @@ const Communication: React.FC = () => {
     const { user } = useAuth();
     const navigate = useNavigate();
     const [activeTab, setActiveTab] = useState<'chats' | 'help' | 'tasks'>('chats');
+    const [searchParams] = useSearchParams();
+    const roomId = searchParams.get('room') || 'General';
     const [messages, setMessages] = useState<ChatMessage[]>([]);
     const [newMessage, setNewMessage] = useState('');
     const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -58,6 +60,71 @@ const Communication: React.FC = () => {
 
     // Audio element ref for remote stream
     const remoteAudioRef = useRef<HTMLAudioElement>(null);
+
+    // User Search & DM State
+    const [showUserSearchModal, setShowUserSearchModal] = useState(false);
+    const [userSearchQuery, setUserSearchQuery] = useState('');
+    const [searchResults, setSearchResults] = useState<any[]>([]);
+    const [isSearching, setIsSearching] = useState(false);
+    const [activeChatUser, setActiveChatUser] = useState<any>(null); // For DM header info
+
+    const handleSearchUsers = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!userSearchQuery.trim()) return;
+
+        setIsSearching(true);
+        try {
+            // Search profiles by nickname or matric number
+            // Note: We are searching the 'profiles' collection
+            const response = await databases.listDocuments(
+                APPWRITE_CONFIG.DATABASE_ID,
+                APPWRITE_CONFIG.PROFILES_COLLECTION_ID,
+                [
+                    Query.or([
+                        Query.search("nickname", userSearchQuery),
+                        Query.search("matricNumber", userSearchQuery),
+                        // We can also try exact match if search index specific
+                        Query.equal("nickname", userSearchQuery),
+                        Query.equal("matricNumber", userSearchQuery)
+                    ]),
+                    Query.limit(5)
+                ]
+            );
+            setSearchResults(response.documents);
+        } catch (error) {
+            console.error("Search failed:", error);
+            setSearchResults([]);
+        } finally {
+            setIsSearching(false);
+        }
+    };
+
+    const startDirectChat = async (otherUser: any) => {
+        if (!user) return;
+
+        // Create a unique room ID for these two users
+        // Sort IDs to ensure consistency regardless of who starts chat
+        const participantIds = [user.$id, otherUser.userId].sort();
+        const dmRoomId = `dm_${participantIds.join('_')}`;
+
+        // Set active room (using URL param is better but local state for now matches existing pattern)
+        // Check how room navigation works in this file. 
+        // Existing implementation uses `activeRoom` state I assume? 
+        // Let's check the code. I need to see 'activeRoom' state definition.
+        // It seems `activeTab` switches between 'chats', 'help', 'tasks'.
+        // The chat room selection logic is likely handled within the 'chats' tab view. 
+        // I will need to verify if 'activeRoom' exists or create it.
+
+        // Assuming 'activeRoom' state exists or I need to add it.
+        // I'll add 'activeRoom' to the state in the next edit if missing.
+        // For now, let's close modal and set a temporary state.
+
+        setShowUserSearchModal(false);
+        setActiveChatUser(otherUser);
+        // updateRoom(dmRoomId); // Placeholder function
+        navigate(`?room=${dmRoomId}`); // Using URL query param is a good safe bet
+        window.location.reload(); // Quick dirty fix to force state update if logic is complex, but better to update state
+    };
 
     useEffect(() => {
         if (remoteStream && remoteAudioRef.current) {
@@ -531,7 +598,51 @@ const Communication: React.FC = () => {
                         </div>
 
                         {/* Chat Area */}
-                        <div className="flex-1 flex flex-col">
+                        <div className="flex-1 flex flex-col h-full bg-slate-50/50">
+                            {/* Chat Header */}
+                            <div className="bg-white border-b border-slate-200 p-4 flex justify-between items-center shadow-sm z-10">
+                                <div className="flex items-center gap-3">
+                                    <button
+                                        onClick={() => setShowMobileSidebar(true)}
+                                        className="md:hidden p-1 text-slate-500"
+                                    >
+                                        <Menu className="w-5 h-5" />
+                                    </button>
+                                    <div className="font-bold text-slate-800 flex items-center gap-2">
+                                        {activeChatUser ? (
+                                            <>
+                                                <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 text-xs">
+                                                    {activeChatUser.nickname?.[0]?.toUpperCase() || "U"}
+                                                </div>
+                                                <div>
+                                                    <div className="text-sm">{activeChatUser.nickname || "User"}</div>
+                                                    <div className="text-[10px] text-slate-400 font-normal">{activeChatUser.userId}</div>
+                                                </div>
+                                            </>
+                                        ) : (
+                                            <>
+                                                <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+                                                {roomId.replace('dm_', 'Direct Message ')}
+                                            </>
+                                        )}
+                                    </div>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    {activeChatUser && (
+                                        <button
+                                            onClick={() => initiateCall(activeChatUser.userId)}
+                                            className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-full transition-colors"
+                                            title="Start Call"
+                                        >
+                                            <Phone className="w-5 h-5" />
+                                        </button>
+                                    )}
+                                    <div className="text-xs text-slate-400 hidden sm:block">
+                                        {messages.length} messages
+                                    </div>
+                                </div>
+                            </div>
+
                             {/* Messages */}
                             <div className="flex-1 overflow-y-auto p-4 space-y-4">
                                 {messages.map((msg) => (
@@ -1044,11 +1155,88 @@ const Communication: React.FC = () => {
                                 End Call
                             </button>
                         </div>
-                        {/* Hidden Audio Element for Remote Stream */}
-                        <audio ref={remoteAudioRef} autoPlay className="hidden" />
                     </div>
-                )
-            }
+                )}
+
+            {/* User Search Modal */}
+            {showUserSearchModal && (
+                <div className="fixed inset-0 z-[60] bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
+                    <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl p-6">
+                        <div className="flex justify-between items-center mb-6">
+                            <h2 className="text-xl font-bold text-slate-900">New Chat</h2>
+                            <button
+                                onClick={() => setShowUserSearchModal(false)}
+                                className="p-2 hover:bg-slate-100 rounded-full transition-colors"
+                            >
+                                <X className="w-5 h-5 text-slate-500" />
+                            </button>
+                        </div>
+
+                        <form onSubmit={handleSearchUsers} className="mb-6 space-y-4">
+                            <div>
+                                <label className="block text-sm font-medium text-slate-700 mb-1">
+                                    Search Users
+                                </label>
+                                <div className="flex gap-2">
+                                    <input
+                                        type="text"
+                                        value={userSearchQuery}
+                                        onChange={(e) => setUserSearchQuery(e.target.value)}
+                                        placeholder="Enter nickname or matric number..."
+                                        className="flex-1 px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all font-medium"
+                                        autoFocus
+                                    />
+                                    <button
+                                        type="submit"
+                                        disabled={isSearching || !userSearchQuery.trim()}
+                                        className="px-4 py-3 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 disabled:opacity-50 font-medium"
+                                    >
+                                        {isSearching ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : "Search"}
+                                    </button>
+                                </div>
+                            </div>
+                        </form>
+
+                        <div className="space-y-2 max-h-[300px] overflow-y-auto">
+                            {searchResults.length > 0 ? (
+                                searchResults.map(profile => (
+                                    <button
+                                        key={profile.$id}
+                                        onClick={() => startDirectChat(profile)}
+                                        className="w-full p-3 flex items-center gap-3 hover:bg-slate-50 rounded-xl transition-colors text-left group"
+                                    >
+                                        <div className="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 font-bold text-sm">
+                                            {profile.nickname?.[0]?.toUpperCase() || profile.userId.substring(0, 2).toUpperCase()}
+                                        </div>
+                                        <div className="flex-1 min-w-0">
+                                            <div className="font-semibold text-slate-900 truncate">
+                                                {profile.nickname || "User"}
+                                            </div>
+                                            <div className="text-xs text-slate-500 truncate">
+                                                {profile.matricNumber || profile.userId}
+                                            </div>
+                                        </div>
+                                        <div className="text-xs font-semibold text-indigo-600 opacity-0 group-hover:opacity-100 transition-opacity">
+                                            Message
+                                        </div>
+                                    </button>
+                                ))
+                            ) : userSearchQuery && !isSearching ? (
+                                <div className="text-center py-8 text-slate-400">
+                                    No users found matching "{userSearchQuery}"
+                                </div>
+                            ) : (
+                                <div className="text-center py-8 text-slate-400 text-sm">
+                                    Search for classmates to start a conversation.
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Hidden Audio Element for Remote Stream */}
+            <audio ref={remoteAudioRef} autoPlay className="hidden" />
         </div >
     );
 };

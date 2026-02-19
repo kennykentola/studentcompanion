@@ -1,5 +1,4 @@
-
-const https = require('https');
+import https from 'https';
 
 // Extracted from setup_appwrite.js content shown earlier
 const API_KEY = 'standard_d66bfc5c3bc1326b7053615aca143f3ab06ea319551cb3386c786c1644b2ec67b5b9970830c8f85583da055950b449d2e4702c3f14b2c58178c8d8e3d52f4ce95f58b6ff8e5b82b037eca82b8871b3ff455133750d19d4ad70ad30c681e0008abe228b828306deb8cb1e15824223aaaeb5b07d3347a56d614a16c45008a80ed6';
@@ -29,8 +28,15 @@ const req = https.request(options, (res) => {
         if (res.statusCode >= 200 && res.statusCode < 300) {
             const response = JSON.parse(data);
             console.log('Collections found:', response.total);
+            const profiles = response.collections.find(c => c.name.toLowerCase().includes('profile'));
+            if (profiles) {
+                console.log(`FOUND PROFILES COLLECTION: Name: ${profiles.name}, ID: ${profiles.$id}`);
+            } else {
+                console.log("PROFILES COLLECTION NOT FOUND!");
+            }
+            console.log("Full List:");
             response.collections.forEach(col => {
-                console.log(`- Name: ${col.name}, ID: ${col.$id}`);
+                console.log(`- ${col.name} (${col.$id})`);
             });
         } else {
             console.error('Error fetching collections:', res.statusCode, data);
