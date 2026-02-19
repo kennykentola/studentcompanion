@@ -58,6 +58,8 @@ export interface ChatMessage {
     }[];
     audioUrl?: string; // For voice notes
     userId?: string;
+    fileId?: string;
+    fileName?: string;
 }
 
 export interface HelpAnswer {
