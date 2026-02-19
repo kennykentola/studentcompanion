@@ -96,23 +96,44 @@ const Communication: React.FC = () => {
 
         setIsSearching(true);
         try {
-            // Search profiles by nickname or matric number
-            // Note: We are searching the 'profiles' collection
-            const response = await databases.listDocuments(
+            // Priority 1: Try combined robust search (Requires Indexes)
+            try {
+                const response = await databases.listDocuments(
+                    APPWRITE_CONFIG.DATABASE_ID,
+                    APPWRITE_CONFIG.PROFILES_COLLECTION_ID,
+                    [
+                        Query.or([
+                            Query.search("nickname", userSearchQuery),
+                            Query.search("matricNumber", userSearchQuery),
+                            Query.search("email", userSearchQuery),
+                            Query.equal("nickname", userSearchQuery),
+                            Query.equal("matricNumber", userSearchQuery),
+                            Query.equal("email", userSearchQuery)
+                        ]),
+                        Query.limit(5)
+                    ]
+                );
+                if (response.documents.length > 0) {
+                    setSearchResults(response.documents);
+                    return;
+                }
+            } catch (err) {
+                console.warn("Combined search failed, trying fallback...", err);
+            }
+
+            // Priority 2: Fallback to exact email match (Requires basic Index)
+            const emailResponse = await databases.listDocuments(
                 APPWRITE_CONFIG.DATABASE_ID,
                 APPWRITE_CONFIG.PROFILES_COLLECTION_ID,
-                [
-                    Query.or([
-                        Query.search("nickname", userSearchQuery),
-                        Query.search("matricNumber", userSearchQuery),
-                        // We can also try exact match if search index specific
-                        Query.equal("nickname", userSearchQuery),
-                        Query.equal("matricNumber", userSearchQuery)
-                    ]),
-                    Query.limit(5)
-                ]
+                [Query.equal("email", userSearchQuery.trim().toLowerCase())]
             );
-            setSearchResults(response.documents);
+
+            if (emailResponse.documents.length > 0) {
+                setSearchResults(emailResponse.documents);
+            } else {
+                setSearchResults([]);
+            }
+
         } catch (error) {
             console.error("Search failed:", error);
             setSearchResults([]);
@@ -120,6 +141,50 @@ const Communication: React.FC = () => {
             setIsSearching(false);
         }
     };
+
+    // Auto-Sync Profile (Ensure user is searchable by email)
+    useEffect(() => {
+        const syncProfile = async () => {
+            if (!user) return;
+            try {
+                const response = await databases.listDocuments(
+                    APPWRITE_CONFIG.DATABASE_ID,
+                    APPWRITE_CONFIG.PROFILES_COLLECTION_ID,
+                    [Query.equal("userId", user.$id)]
+                );
+
+                if (response.documents.length > 0) {
+                    const profile = response.documents[0];
+                    if (!profile.email) {
+                        await databases.updateDocument(
+                            APPWRITE_CONFIG.DATABASE_ID,
+                            APPWRITE_CONFIG.PROFILES_COLLECTION_ID,
+                            profile.$id,
+                            { email: user.email }
+                        );
+                        console.log("Profile email synced.");
+                    }
+                } else {
+                    // Create minimal profile if none exists
+                    await databases.createDocument(
+                        APPWRITE_CONFIG.DATABASE_ID,
+                        APPWRITE_CONFIG.PROFILES_COLLECTION_ID,
+                        ID.unique(),
+                        {
+                            userId: user.$id,
+                            email: user.email,
+                            nickname: user.name || "User",
+                        }
+                    );
+                    console.log("Minimal profile created for sync.");
+                }
+            } catch (error) {
+                console.error("Profile sync failed:", error);
+            }
+        };
+
+        syncProfile();
+    }, [user]);
 
     const startDirectChat = async (otherUser: any) => {
         if (!user) return;
@@ -1274,7 +1339,7 @@ const Communication: React.FC = () => {
                                         type="text"
                                         value={userSearchQuery}
                                         onChange={(e) => setUserSearchQuery(e.target.value)}
-                                        placeholder="Enter nickname or matric number..."
+                                        placeholder="Enter nickname, email or matric number..."
                                         className="flex-1 px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all font-medium"
                                         autoFocus
                                     />
@@ -1305,7 +1370,7 @@ const Communication: React.FC = () => {
                                                 {profile.nickname || "User"}
                                             </div>
                                             <div className="text-xs text-slate-500 truncate">
-                                                {profile.matricNumber || profile.userId}
+                                                {profile.email || profile.matricNumber || profile.userId}
                                             </div>
                                         </div>
                                         <div className="text-xs font-semibold text-indigo-600 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -1314,8 +1379,16 @@ const Communication: React.FC = () => {
                                     </button>
                                 ))
                             ) : userSearchQuery && !isSearching ? (
-                                <div className="text-center py-8 text-slate-400">
-                                    No users found matching "{userSearchQuery}"
+                                <div className="text-center py-8">
+                                    <div className="text-slate-400 mb-2">No users found matching "{userSearchQuery}"</div>
+                                    <div className="bg-amber-50 rounded-xl p-4 text-[10px] text-amber-700 border border-amber-100 max-w-[280px] mx-auto text-left">
+                                        <p className="font-bold mb-1 italic">TIP to find classmates:</p>
+                                        <ul className="list-disc pl-3 space-y-1">
+                                            <li>Ensure **Search Indexes** are created in Appwrite (Profiles collection).</li>
+                                            <li>Ask your classmate to log in at least once to sync their profile.</li>
+                                            <li>Try searching by their exact email address.</li>
+                                        </ul>
+                                    </div>
                                 </div>
                             ) : (
                                 <div className="text-center py-8 text-slate-400 text-sm">
