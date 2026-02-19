@@ -130,6 +130,7 @@ export default function DirectMessage() {
 
                 // Handle Signaling
                 if (payload.body && payload.body.includes('"type":')) {
+                    console.log("[DM] Signaling message arrived!");
                     handleSignalMessage({
                         content: payload.body,
                         userId: payload.userId,

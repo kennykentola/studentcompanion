@@ -61,9 +61,10 @@ export const useWebRTC = (currentUserId: string | undefined, currentUserName: st
                     body: JSON.stringify({ type, payload, targetUserId, senderId: currentUserId, senderName: currentUserName }),
                     userId: currentUserId,
                     username: currentUserName,
-                    roomId: "general" // Explicitly set to general to avoid room filters
+                    roomId: "General" // Standardize with General room
                 }
             );
+            console.log(`[WebRTC] Signal '${type}' sent to ${targetUserId}`);
         } catch (err) {
             console.error("Failed to send signal:", err);
         }
@@ -161,6 +162,7 @@ export const useWebRTC = (currentUserId: string | undefined, currentUserName: st
     };
 
     const handleSignalMessage = async (message: any) => {
+        console.log(`[WebRTC] Received potential signal from ${message.username}:`, message.content?.substring(0, 50));
         // No longer returning early if userId === currentUserId to allow multi-tab testing
 
         let signal: any;
@@ -172,7 +174,12 @@ export const useWebRTC = (currentUserId: string | undefined, currentUserName: st
         } catch { return; }
 
         // Must be a signal targeted at us
-        if (!signal || !signal.type || signal.targetUserId !== currentUserId) return;
+        if (!signal || !signal.type || signal.targetUserId !== currentUserId) {
+            if (signal) console.log(`[WebRTC] Signal ignored: Target ${signal.targetUserId} doesn't match Current ${currentUserId}`);
+            return;
+        }
+
+        console.log(`[WebRTC] Processing signal '${signal.type}' from ${signal.senderName}`);
 
         try {
             switch (signal.type) {

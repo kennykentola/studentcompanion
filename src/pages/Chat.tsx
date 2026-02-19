@@ -353,13 +353,13 @@ const Communication: React.FC = () => {
 
                 // Handle Signaling
                 if (payload.body && payload.body.includes('"type":')) {
+                    console.log("[Chat] Signaling message arrived!");
                     handleSignalMessage({
                         content: payload.body,
                         userId: payload.userId,
                         username: payload.username
                     });
-                    // Don't add to chat
-                    return;
+                    return; // Don't add signaling to chat
                 }
 
                 if (response.events.includes("databases.*.collections.*.documents.*.create")) {
