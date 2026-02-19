@@ -1399,8 +1399,21 @@ const Communication: React.FC = () => {
                                                 {profile.email || profile.matricNumber || profile.userId}
                                             </div>
                                         </div>
-                                        <div className="text-xs font-semibold text-indigo-600 opacity-0 group-hover:opacity-100 transition-opacity">
-                                            Message
+                                        <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                            <button
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    initiateCall(profile.userId);
+                                                    setShowUserSearchModal(false);
+                                                }}
+                                                className="p-2 text-indigo-600 hover:bg-indigo-100 rounded-lg transition-colors"
+                                                title="Call User"
+                                            >
+                                                <Phone className="w-4 h-4" />
+                                            </button>
+                                            <div className="text-xs font-semibold text-indigo-600 self-center">
+                                                Message
+                                            </div>
                                         </div>
                                     </button>
                                 ))

@@ -11,9 +11,13 @@ import {
     Mic,
     Loader2,
     Phone,
-    X
+    X,
+    PhoneIncoming,
+    PhoneOff,
+    User as UserIcon
 } from "lucide-react";
 import type { ChatMessage } from '../types';
+import { useWebRTC } from '@/hooks/useWebRTC';
 
 export default function DirectMessage() {
     const { userId: targetUserId } = useParams<{ userId: string }>();
@@ -28,6 +32,29 @@ export default function DirectMessage() {
     const [attachedFile, setAttachedFile] = useState<File | null>(null);
     const [isRecording, setIsRecording] = useState(false);
     const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(null);
+
+    // WebRTC Hook
+    const {
+        initiateCall,
+        acceptCall,
+        rejectCall,
+        endCall,
+        handleSignalMessage,
+        incomingCall,
+        callActive,
+        connectionState,
+        remoteStream
+    } = useWebRTC(user?.$id, user?.name);
+
+    // Audio element ref for remote stream
+    const remoteAudioRef = useRef<HTMLAudioElement>(null);
+
+    useEffect(() => {
+        if (remoteStream && remoteAudioRef.current) {
+            remoteAudioRef.current.srcObject = remoteStream;
+            remoteAudioRef.current.play().catch(console.error);
+        }
+    }, [remoteStream]);
 
     const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -81,7 +108,10 @@ export default function DirectMessage() {
                     isMe: doc.userId === user.$id,
                     userId: doc.userId,
                     fileId: doc.fileId,
-                    fileName: doc.fileName
+                    fileName: doc.fileName,
+                    audioUrl: (doc.fileName?.endsWith('.webm') || doc.fileName?.endsWith('.wav'))
+                        ? storage.getFileView(APPWRITE_CONFIG.BUCKET_ID, doc.fileId)
+                        : undefined
                 }));
                 setMessages(mapped);
             } catch (error) {
@@ -97,6 +127,17 @@ export default function DirectMessage() {
             `databases.${APPWRITE_CONFIG.DATABASE_ID}.collections.${APPWRITE_CONFIG.MESSAGES_COLLECTION_ID}.documents`,
             (response: any) => {
                 const payload = response.payload as any;
+
+                // Handle Signaling
+                if (payload.body && payload.body.includes('"type":')) {
+                    handleSignalMessage({
+                        content: payload.body,
+                        userId: payload.userId,
+                        username: payload.username
+                    });
+                    return; // Don't add signaling to chat
+                }
+
                 if (response.events.includes("databases.*.collections.*.documents.*.create")) {
                     if (payload.roomId !== roomId) return;
 
@@ -108,7 +149,10 @@ export default function DirectMessage() {
                         isMe: payload.userId === user.$id,
                         userId: payload.userId,
                         fileId: payload.fileId,
-                        fileName: payload.fileName
+                        fileName: payload.fileName,
+                        audioUrl: (payload.fileName?.endsWith('.webm') || payload.fileName?.endsWith('.wav'))
+                            ? storage.getFileView(APPWRITE_CONFIG.BUCKET_ID, payload.fileId)
+                            : undefined
                     };
                     setMessages((prev: ChatMessage[]) => [...prev, newMsg]);
                 }
@@ -236,7 +280,11 @@ export default function DirectMessage() {
                     </div>
                 </div>
                 <div className="flex items-center gap-2">
-                    <button className="p-2 text-indigo-100 bg-indigo-50/50 cursor-not-allowed rounded-full">
+                    <button
+                        onClick={() => targetUserId && initiateCall(targetUserId)}
+                        className={`p-2 rounded-full transition-all ${callActive ? 'bg-green-500 text-white shadow-lg animate-pulse' : 'text-indigo-600 bg-indigo-50 hover:bg-indigo-100'}`}
+                        title="Voice Call"
+                    >
                         <Phone className="w-5 h-5" />
                     </button>
                 </div>
@@ -263,7 +311,11 @@ export default function DirectMessage() {
                             <div className={`max-w-[85%] md:max-w-[70%] rounded-2xl p-3 shadow-sm ${msg.isMe ? 'bg-indigo-600 text-white' : 'bg-white border border-slate-100 text-slate-800'}`}>
                                 {!msg.isMe && <div className="text-[10px] font-bold opacity-70 mb-1">{msg.sender}</div>}
                                 <div className="text-sm whitespace-pre-wrap leading-relaxed">{msg.content}</div>
-                                {msg.fileName && (
+                                {msg.audioUrl ? (
+                                    <div className={`mt-2 p-1 rounded-xl bg-black/5 flex items-center gap-2 ${msg.isMe ? 'bg-white/10' : 'bg-slate-100'}`}>
+                                        <audio src={msg.audioUrl} controls className="h-8 max-w-full" />
+                                    </div>
+                                ) : msg.fileName && (
                                     <div className={`mt-2 p-2 rounded-xl flex items-center gap-2 text-xs border ${msg.isMe ? 'bg-white/10 border-white/20' : 'bg-slate-50 border-slate-200'}`}>
                                         <Paperclip className="w-3 h-3" />
                                         <span className="truncate">{msg.fileName}</span>
@@ -344,6 +396,64 @@ export default function DirectMessage() {
                     </button>
                 </form>
             </div>
+            {/* Incoming Call Modal */}
+            {incomingCall && (
+                <div className="fixed inset-0 z-[100] bg-black/80 flex items-center justify-center p-4 backdrop-blur-md">
+                    <div className="bg-white rounded-2xl w-full max-w-sm p-8 text-center shadow-2xl animate-in fade-in zoom-in duration-300">
+                        <div className="w-20 h-20 bg-indigo-100 rounded-full flex items-center justify-center mx-auto mb-6 animate-pulse">
+                            <PhoneIncoming className="w-10 h-10 text-indigo-600" />
+                        </div>
+                        <h3 className="text-2xl font-bold text-slate-900 mb-2">{incomingCall?.callerName}</h3>
+                        <p className="text-slate-500 mb-8">Incoming Voice Call...</p>
+                        <div className="flex gap-4 justify-center">
+                            <button
+                                onClick={rejectCall}
+                                className="flex-1 px-6 py-4 bg-red-100 text-red-600 rounded-full hover:bg-red-200 transition-colors flex flex-col items-center gap-2"
+                            >
+                                <PhoneOff className="w-6 h-6" />
+                                <span className="text-xs font-semibold uppercase tracking-wider">Decline</span>
+                            </button>
+                            <button
+                                onClick={acceptCall}
+                                className="flex-1 px-6 py-4 bg-green-500 text-white rounded-full hover:bg-green-600 transition-colors shadow-lg shadow-green-200 flex flex-col items-center gap-2"
+                            >
+                                <Phone className="w-6 h-6" />
+                                <span className="text-xs font-semibold uppercase tracking-wider">Accept</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Active Call Overlay */}
+            {callActive && (
+                <div className="fixed top-4 right-4 z-[101] w-72 bg-slate-900 text-white rounded-2xl shadow-2xl overflow-hidden border border-slate-700 animate-in slide-in-from-right duration-300">
+                    <div className="p-4 bg-slate-800 flex items-center justify-between border-b border-slate-700">
+                        <div className="flex items-center gap-3">
+                            <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+                            <span className="font-semibold text-sm">Active Call</span>
+                        </div>
+                        <span className="text-xs text-slate-400 capitalize">{connectionState}</span>
+                    </div>
+                    <div className="p-6 text-center">
+                        <div className="w-16 h-16 bg-slate-700 rounded-full flex items-center justify-center mx-auto mb-4">
+                            <UserIcon className="w-8 h-8 text-slate-400" />
+                        </div>
+                        <div className="text-sm text-slate-400 mb-6">Connected</div>
+
+                        <button
+                            onClick={endCall}
+                            className="w-full py-3 bg-red-500 hover:bg-red-600 text-white rounded-xl font-medium transition-colors flex items-center justify-center gap-2"
+                        >
+                            <PhoneOff className="w-5 h-5" />
+                            End Call
+                        </button>
+                    </div>
+                </div>
+            )}
+
+            {/* Hidden Audio Element for Remote Stream */}
+            <audio ref={remoteAudioRef} autoPlay className="hidden" />
         </div>
     );
 }
