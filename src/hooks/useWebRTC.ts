@@ -61,8 +61,7 @@ export const useWebRTC = (currentUserId: string | undefined, currentUserName: st
                     body: JSON.stringify({ type, payload, targetUserId, senderId: currentUserId, senderName: currentUserName }),
                     userId: currentUserId,
                     username: currentUserName,
-                    // We can't actually hide messages easily in Appwrite without a specific attribute. 
-                    // We'll filter them client-side based on body content.
+                    roomId: "general" // Explicitly set to general to avoid room filters
                 }
             );
         } catch (err) {
@@ -162,8 +161,7 @@ export const useWebRTC = (currentUserId: string | undefined, currentUserName: st
     };
 
     const handleSignalMessage = async (message: any) => {
-        // Only process messages created by others
-        if (message.userId === currentUserId) return;
+        // No longer returning early if userId === currentUserId to allow multi-tab testing
 
         let signal: any;
         try {
