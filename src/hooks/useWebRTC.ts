@@ -61,9 +61,9 @@ export const useWebRTC = (currentUserId: string | undefined, currentUserName: st
                     body: JSON.stringify({ type, payload, targetUserId, senderId: currentUserId, senderName: currentUserName }),
                     userId: currentUserId,
                     username: currentUserName,
-                    roomId: "General", // Standardize with General room
-                    fileId: "", // Add missing schema attributes
-                    fileName: "",
+                    roomId: "General",
+                    fileId: null, // Use null for optional fields
+                    fileName: null,
                     attachments: []
                 }
             );
