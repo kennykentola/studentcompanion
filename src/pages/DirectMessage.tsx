@@ -170,8 +170,13 @@ export default function DirectMessage() {
 
             setNewMessage("");
             setAttachedFile(null);
-        } catch (error) {
+        } catch (error: any) {
             console.error("Failed to send message:", error);
+            if (error?.message?.includes("File extension not allowed")) {
+                alert("Upload failed: This file type is not allowed by the server. Please try a different file format or update your Appwrite bucket settings to allow .webm files.");
+            } else {
+                alert("Failed to send message. Please try again.");
+            }
         } finally {
             setIsSending(false);
         }
