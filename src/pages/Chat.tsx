@@ -639,6 +639,27 @@ const Communication: React.FC = () => {
                     attachments: fileId ? [fileId] : [], // Populate both for robustness
                 }
             );
+
+            // Trigger Notification if it's a DM
+            if (roomId.startsWith('dm_')) {
+                const participantIds = roomId.replace('dm_', '').split('_');
+                const recipientId = participantIds.find(id => id !== user.$id);
+
+                if (recipientId) {
+                    await databases.createDocument(
+                        APPWRITE_CONFIG.DATABASE_ID,
+                        APPWRITE_CONFIG.NOTIFICATIONS_COLLECTION_ID,
+                        ID.unique(),
+                        {
+                            userId: recipientId,
+                            message: `New private message from ${user.name}`,
+                            isRead: false,
+                            type: "info"
+                        }
+                    );
+                }
+            }
+
             setNewMessage("");
             setAttachedFile(null);
         } catch (error: any) {

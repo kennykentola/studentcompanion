@@ -155,6 +155,22 @@ export default function DirectMessage() {
                     attachments: fileId ? [fileId] : []
                 }
             );
+
+            // Trigger Notification for recipient
+            if (targetUserId) {
+                await databases.createDocument(
+                    APPWRITE_CONFIG.DATABASE_ID,
+                    APPWRITE_CONFIG.NOTIFICATIONS_COLLECTION_ID,
+                    ID.unique(),
+                    {
+                        userId: targetUserId,
+                        message: `New message from ${user.name}`,
+                        isRead: false,
+                        type: "info"
+                    }
+                );
+            }
+
             setNewMessage("");
             setAttachedFile(null);
         } catch (error) {

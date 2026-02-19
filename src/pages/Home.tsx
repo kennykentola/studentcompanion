@@ -1,3 +1,4 @@
+import React, { useState } from "react";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import {
@@ -6,10 +7,13 @@ import {
     GraduationCap,
     CheckSquare,
     MessageSquare,
-    Zap
+    Zap,
+    Menu,
+    X
 } from "lucide-react";
 
 export default function Home() {
+    const [isMenuOpen, setIsMenuOpen] = React.useState(false);
     return (
         <div className="min-h-screen bg-background text-foreground flex flex-col">
             {/* Navigation */}
@@ -24,14 +28,40 @@ export default function Home() {
                         <a href="#testimonials" className="text-sm font-medium hover:text-primary transition-colors">Testimonials</a>
                     </nav>
                     <div className="flex items-center gap-4">
-                        <Button variant="ghost" asChild>
-                            <Link to="/login">Login</Link>
-                        </Button>
-                        <Button asChild>
-                            <Link to="/register">Get Started</Link>
-                        </Button>
+                        <div className="hidden sm:flex items-center gap-2">
+                            <Button variant="ghost" asChild>
+                                <Link to="/login">Login</Link>
+                            </Button>
+                            <Button asChild>
+                                <Link to="/register">Get Started</Link>
+                            </Button>
+                        </div>
+                        <button
+                            className="md:hidden p-2 text-muted-foreground hover:bg-muted rounded-md transition-colors"
+                            onClick={() => setIsMenuOpen(!isMenuOpen)}
+                        >
+                            {isMenuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
+                        </button>
                     </div>
                 </div>
+
+                {/* Mobile Menu */}
+                {isMenuOpen && (
+                    <div className="md:hidden bg-background border-b animate-in slide-in-from-top duration-300">
+                        <div className="flex flex-col p-6 space-y-4">
+                            <a href="#features" onClick={() => setIsMenuOpen(false)} className="text-lg font-medium hover:text-primary transition-colors">Features</a>
+                            <a href="#testimonials" onClick={() => setIsMenuOpen(false)} className="text-lg font-medium hover:text-primary transition-colors">Testimonials</a>
+                            <div className="flex flex-col gap-2 pt-4 border-t">
+                                <Button variant="outline" asChild onClick={() => setIsMenuOpen(false)}>
+                                    <Link to="/login">Login</Link>
+                                </Button>
+                                <Button asChild onClick={() => setIsMenuOpen(false)}>
+                                    <Link to="/register">Get Started</Link>
+                                </Button>
+                            </div>
+                        </div>
+                    </div>
+                )}
             </header>
 
             {/* Hero Section */}
@@ -163,9 +193,9 @@ export default function Home() {
                         &copy; {new Date().getFullYear()} Student Companion. Built for students, by students.
                     </p>
                     <div className="flex gap-6">
-                        <a href="#" className="text-sm text-muted-foreground hover:text-foreground">Privacy</a>
-                        <a href="#" className="text-sm text-muted-foreground hover:text-foreground">Terms</a>
-                        <a href="#" className="text-sm text-muted-foreground hover:text-foreground">dict</a>
+                        <Link to="/privacy" className="text-sm text-muted-foreground hover:text-foreground">Privacy</Link>
+                        <Link to="/terms" className="text-sm text-muted-foreground hover:text-foreground">Terms</Link>
+                        <Link to="/disclaimer" className="text-sm text-muted-foreground hover:text-foreground">Disclaimer</Link>
                     </div>
                 </div>
             </footer>

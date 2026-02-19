@@ -15,6 +15,9 @@ import Chat from "@/pages/Chat";
 import Calculator from "@/pages/Calculator";
 import Settings from "@/pages/Settings";
 import DirectMessage from "@/pages/DirectMessage";
+import Privacy from "@/pages/Privacy";
+import Terms from "@/pages/Terms";
+import Disclaimer from "@/pages/Disclaimer";
 
 function App() {
   return (
@@ -35,6 +38,9 @@ function App() {
               <Route path="/calculator" element={<Calculator />} />
               <Route path="/settings" element={<Settings />} />
               <Route path="/chat/dm/:userId" element={<DirectMessage />} />
+              <Route path="/privacy" element={<Privacy />} />
+              <Route path="/terms" element={<Terms />} />
+              <Route path="/disclaimer" element={<Disclaimer />} />
             </Route>
           </Route>
 
