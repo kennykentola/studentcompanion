@@ -172,10 +172,11 @@ export default function DirectMessage() {
             setAttachedFile(null);
         } catch (error: any) {
             console.error("Failed to send message:", error);
-            if (error?.message?.includes("File extension not allowed")) {
-                alert("Upload failed: This file type is not allowed by the server. Please try a different file format or update your Appwrite bucket settings to allow .webm files.");
+            const errorMessage = error?.message || "";
+            if (errorMessage.includes("extension") || errorMessage.includes("not allowed")) {
+                alert(`Upload Blocked: The server does not allow .webm files (voice notes). \n\nPlease add "webm" to your Appwrite Storage Bucket "Allowed File Extensions" list.`);
             } else {
-                alert("Failed to send message. Please try again.");
+                alert(`Failed to send message: ${errorMessage || "Please try again."}`);
             }
         } finally {
             setIsSending(false);
