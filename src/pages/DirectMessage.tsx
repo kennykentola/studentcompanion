@@ -175,6 +175,8 @@ export default function DirectMessage() {
             const errorMessage = error?.message || "";
             if (errorMessage.includes("extension") || errorMessage.includes("not allowed")) {
                 alert(`Upload Blocked: The server does not allow .webm files (voice notes). \n\nPlease add "webm" to your Appwrite Storage Bucket "Allowed File Extensions" list.`);
+            } else if (errorMessage.includes("Unknown attribute") && (errorMessage.includes("fileId") || errorMessage.includes("fileName"))) {
+                alert("Database Error: Your 'Messages' collection is missing the 'fileId' or 'fileName' attribute. \n\nPlease follow the updated 'appwrite_setup_guide.md' (Section 4) to add these attributes in your Appwrite Console.");
             } else {
                 alert(`Failed to send message: ${errorMessage || "Please try again."}`);
             }

@@ -664,10 +664,13 @@ const Communication: React.FC = () => {
             setAttachedFile(null);
         } catch (error: any) {
             console.error("Failed to send message", error);
-            if (error?.message?.includes("File extension not allowed")) {
+            const errorMessage = error?.message || "";
+            if (errorMessage.includes("Unknown attribute") && (errorMessage.includes("fileId") || errorMessage.includes("fileName"))) {
+                alert("Database Error: Your 'Messages' collection is missing the 'fileId' or 'fileName' attribute. \n\nPlease follow the updated 'appwrite_setup_guide.md' (Section 4) to add these attributes in your Appwrite Console.");
+            } else if (errorMessage.includes("extension") || errorMessage.includes("not allowed")) {
                 alert("Upload failed: This file type is not allowed by the server. Please try a different file format (e.g., JPG, PNG, PDF).");
             } else {
-                alert("Failed to send message. Please try again.");
+                alert(`Failed to send message: ${errorMessage || "Please try again."}`);
             }
         }
     };
