@@ -103,6 +103,7 @@ export default function Settings() {
         try {
             const profileData = {
                 userId: user.$id,
+                email: user.email,
                 matricNumber,
                 nickname,
                 department,

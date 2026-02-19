@@ -68,6 +68,28 @@ const Communication: React.FC = () => {
     const [isSearching, setIsSearching] = useState(false);
     const [activeChatUser, setActiveChatUser] = useState<any>(null); // For DM header info
 
+    // Persistent Active Chats
+    const [activeChats, setActiveChats] = useState<any[]>(() => {
+        try {
+            const saved = localStorage.getItem('activeChats');
+            return saved ? JSON.parse(saved) : [];
+        } catch {
+            return [];
+        }
+    });
+
+    useEffect(() => {
+        // Find if current room is a DM and set activeChatUser
+        if (roomId.startsWith('dm_') && activeChats.length > 0) {
+            const chat = activeChats.find(c => c.roomId === roomId);
+            if (chat) {
+                setActiveChatUser(chat.user);
+            }
+        } else if (!roomId.startsWith('dm_')) {
+            setActiveChatUser(null);
+        }
+    }, [roomId, activeChats]);
+
     const handleSearchUsers = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!userSearchQuery.trim()) return;
@@ -107,23 +129,20 @@ const Communication: React.FC = () => {
         const participantIds = [user.$id, otherUser.userId].sort();
         const dmRoomId = `dm_${participantIds.join('_')}`;
 
-        // Set active room (using URL param is better but local state for now matches existing pattern)
-        // Check how room navigation works in this file. 
-        // Existing implementation uses `activeRoom` state I assume? 
-        // Let's check the code. I need to see 'activeRoom' state definition.
-        // It seems `activeTab` switches between 'chats', 'help', 'tasks'.
-        // The chat room selection logic is likely handled within the 'chats' tab view. 
-        // I will need to verify if 'activeRoom' exists or create it.
-
-        // Assuming 'activeRoom' state exists or I need to add it.
-        // I'll add 'activeRoom' to the state in the next edit if missing.
-        // For now, let's close modal and set a temporary state.
+        // Save to active chats if not exists
+        const newChat = { roomId: dmRoomId, user: otherUser, lastActive: Date.now() };
+        setActiveChats(prev => {
+            const exists = prev.find(c => c.roomId === dmRoomId);
+            const updated = exists ? prev : [newChat, ...prev];
+            localStorage.setItem('activeChats', JSON.stringify(updated));
+            return updated;
+        });
 
         setShowUserSearchModal(false);
         setActiveChatUser(otherUser);
         // updateRoom(dmRoomId); // Placeholder function
         navigate(`?room=${dmRoomId}`); // Using URL query param is a good safe bet
-        window.location.reload(); // Quick dirty fix to force state update if logic is complex, but better to update state
+        // window.location.reload(); // Quick dirty fix to force state update if logic is complex, but better to update state
     };
 
     useEffect(() => {
@@ -234,6 +253,15 @@ const Communication: React.FC = () => {
                             console.error("Error parsing attachments", e);
                         }
 
+                        // Determine if message is audio based on file extension or type if available
+                        let audioUrl = doc.audioUrl;
+                        if (!audioUrl && attachments && attachments.length > 0) {
+                            const att = attachments[0];
+                            if (att.name.endsWith('.webm') || att.name.endsWith('.mp3') || att.name.endsWith('.wav') || att.name.endsWith('.m4a')) {
+                                audioUrl = att.url;
+                            }
+                        }
+
                         return {
                             id: doc.$id,
                             sender: doc.username,
@@ -242,10 +270,11 @@ const Communication: React.FC = () => {
                             isMe: doc.userId === user.$id,
                             userId: doc.userId,
                             attachments: attachments,
-                            audioUrl: doc.audioUrl
+                            audioUrl: audioUrl
                         };
                     });
                 setMessages(mappedMessages);
+                messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }); // Scroll on load
             } catch (error) {
                 console.error("Failed to fetch messages", error);
             }
@@ -271,13 +300,32 @@ const Communication: React.FC = () => {
                 }
 
                 if (response.events.includes("databases.*.collections.*.documents.*.create")) {
+                    // Check for audio attachment
+                    let audioUrl = payload.audioUrl;
+                    if (!audioUrl && payload.fileId) {
+                        // Best guess for realtime new message
+                        const fileUrl = storage.getFileView(APPWRITE_CONFIG.BUCKET_ID, payload.fileId);
+                        if (payload.fileName && (payload.fileName.endsWith('.webm') || payload.fileName.endsWith('.mp3') || payload.fileName.endsWith('.wav'))) {
+                            audioUrl = fileUrl;
+                        }
+                    }
+
                     const newMsg: ChatMessage = {
                         id: payload.$id,
                         sender: payload.username,
                         content: payload.body,
                         timestamp: format(new Date(payload.$createdAt), "h:mm a"),
                         isMe: payload.userId === user.$id,
-                        userId: payload.userId
+                        userId: payload.userId,
+                        // Naive attachment handling for realtime - ideally fetch full doc
+                        attachments: payload.fileId ? [{
+                            id: payload.fileId,
+                            name: payload.fileName,
+                            type: 'file',
+                            size: 0,
+                            url: storage.getFileView(APPWRITE_CONFIG.BUCKET_ID, payload.fileId)
+                        }] : [],
+                        audioUrl: audioUrl
                     };
                     setMessages(prev => [...prev, newMsg]);
                 }
@@ -456,28 +504,34 @@ const Communication: React.FC = () => {
     const startRecording = async () => {
         try {
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-            const recorder = new MediaRecorder(stream);
+
+            // Determine supported mime type
+            const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+                ? 'audio/webm;codecs=opus'
+                : 'audio/webm';
+
+            const recorder = new MediaRecorder(stream, { mimeType });
             const chunks: BlobPart[] = [];
 
-            recorder.ondataavailable = (e) => chunks.push(e.data);
-            recorder.onstop = () => {
-                const blob = new Blob(chunks, { type: 'audio/webm' });
-                // Appwrite often blocks .webm by default, rename to .mp3 to bypass extension check
-                // (Most modern browsers/players handle the content sniffing correctly)
-                const file = new File([blob], "voice-note.mp3", { type: 'audio/webm' });
-                setAttachedFile(file);
+            recorder.ondataavailable = (e) => {
+                if (e.data.size > 0) {
+                    chunks.push(e.data);
+                }
             };
 
             recorder.onstop = () => {
                 const blob = new Blob(chunks, { type: 'audio/webm' });
-                // Using .wav extension to bypass Appwrite restriction, container is still webm
-                const file = new File([blob], "voice-note.wav", { type: 'audio/webm' });
+                // Use .webm extension - it's standard and should play in modern browsers
+                const file = new File([blob], "voice_note.webm", { type: 'audio/webm' });
                 setAttachedFile(file);
             };
+
             setMediaRecorder(recorder);
+            recorder.start();
             setIsRecording(true);
         } catch (err) {
             console.error("Error accessing microphone:", err);
+            alert("Could not access microphone. Please ensure permissions are granted.");
         }
     };
 
@@ -575,7 +629,6 @@ const Communication: React.FC = () => {
             </div>
 
             {/* Main Content */}
-            {/* Main Content */}
             <div className="flex-1 overflow-hidden p-0 md:p-6">
                 {activeTab === 'chats' ? (
                     <div className="flex h-full bg-white md:rounded-2xl shadow-sm border-x-0 border-y-0 md:border border-slate-200 overflow-hidden">
@@ -586,13 +639,61 @@ const Communication: React.FC = () => {
                                     <button onClick={() => setShowMobileSidebar(false)}><X className="w-6 h-6 text-slate-500" /></button>
                                 </div>
                             )}
-                            <div className="p-4 border-b border-slate-200">
-                                <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Rooms</h3>
-                            </div>
-                            <div className="flex-1 overflow-y-auto p-2 space-y-1">
-                                <div className="p-3 bg-white border border-indigo-100 rounded-xl cursor-pointer shadow-sm">
-                                    <div className="font-semibold text-slate-800 text-sm">General Chat</div>
-                                    <div className="text-xs text-slate-500">Public Room</div>
+                            <div className="flex-1 overflow-y-auto p-2">
+                                <div className="space-y-1">
+                                    <h3 className="px-2 py-2 text-xs font-semibold text-slate-500 uppercase tracking-wider">Rooms</h3>
+                                    <div className="p-3 bg-white border border-indigo-100 rounded-xl cursor-pointer shadow-sm">
+                                        <div className="font-semibold text-slate-800 text-sm">General Chat</div>
+                                        <div className="text-xs text-slate-500">Public Room</div>
+                                    </div>
+                                </div>
+
+                                {/* Direct Messages Section */}
+                                <div className="px-2 py-2 mt-4 text-xs font-bold text-slate-400 uppercase tracking-wider flex justify-between items-center">
+                                    <span>Direct Messages</span>
+                                    <button
+                                        onClick={() => setShowUserSearchModal(true)}
+                                        className="hover:bg-indigo-100 p-1.5 rounded-lg transition-colors text-indigo-600 bg-indigo-50/50"
+                                        title="New Chat"
+                                    >
+                                        <Plus className="w-3.5 h-3.5" />
+                                    </button>
+                                </div>
+
+                                <div className="space-y-1">
+                                    {activeChats.map((chat) => (
+                                        <button
+                                            key={chat.roomId}
+                                            onClick={() => {
+                                                navigate(`?room=${chat.roomId}`);
+                                                setShowMobileSidebar(false);
+                                            }}
+                                            className={`w-full text-left px-3 py-2.5 rounded-xl transition-all flex items-center gap-3 group ${roomId === chat.roomId
+                                                ? 'bg-indigo-50 text-indigo-600 shadow-sm'
+                                                : 'text-slate-600 hover:bg-slate-50'
+                                                }`}
+                                        >
+                                            <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-colors ${roomId === chat.roomId ? 'bg-indigo-600 text-white' : 'bg-slate-200 text-slate-600 group-hover:bg-indigo-100 group-hover:text-indigo-600'}`}>
+                                                {chat.user?.nickname?.[0]?.toUpperCase() || "U"}
+                                            </div>
+                                            <div className="flex-1 min-w-0">
+                                                <div className="font-semibold truncate text-sm">{chat.user?.nickname || "User"}</div>
+                                                <div className="text-[10px] opacity-60 truncate">Private Message</div>
+                                            </div>
+                                        </button>
+                                    ))}
+
+                                    {activeChats.length === 0 && (
+                                        <div className="px-3 py-4 text-center rounded-xl border border-dashed border-slate-200">
+                                            <p className="text-[10px] text-slate-400 font-medium">No active chats</p>
+                                            <button
+                                                onClick={() => setShowUserSearchModal(true)}
+                                                className="text-[10px] text-indigo-600 font-bold hover:underline mt-1"
+                                            >
+                                                Start conversation
+                                            </button>
+                                        </div>
+                                    )}
                                 </div>
                             </div>
                         </div>
@@ -950,16 +1051,13 @@ const Communication: React.FC = () => {
                                                     </div>
 
                                                     <p className="text-slate-500 text-sm mb-3 line-clamp-2">{task.description || "No description provided."}</p>
-
-                                                    <div className="flex items-center gap-4 text-xs font-medium text-slate-400">
-                                                        {task.dueDate && (
-                                                            <div className="flex items-center gap-1.5 bg-slate-50 px-2 py-1 rounded-md text-slate-600">
-                                                                <Calendar className="w-3.5 h-3.5" />
-                                                                <span>{format(new Date(task.dueDate), "MMM d, yyyy")}</span>
-                                                            </div>
-                                                        )}
+                                                    <div className="flex items-center gap-3">
+                                                        <div className="flex items-center gap-1.5 bg-slate-50 px-2 py-1 rounded-md text-slate-600 text-xs">
+                                                            <Calendar className="w-3.5 h-3.5" />
+                                                            <span>{format(new Date(task.dueDate), "MMM d, yyyy")}</span>
+                                                        </div>
                                                         {task.courseId && (
-                                                            <div className="flex items-center gap-1.5">
+                                                            <div className="flex items-center gap-1.5 text-xs text-slate-500">
                                                                 <div className="w-1.5 h-1.5 rounded-full bg-indigo-500" />
                                                                 <span>{task.courseId}</span>
                                                             </div>
@@ -987,176 +1085,170 @@ const Communication: React.FC = () => {
             </div>
 
             {/* Quick Add Task Modal */}
-            {
-                showAddTaskModal && (
-                    <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4 backdrop-blur-sm">
-                        <div className="bg-white rounded-2xl w-full max-w-sm p-6 shadow-2xl animate-in fade-in zoom-in duration-200">
-                            <div className="flex justify-between items-center mb-6">
-                                <h2 className="text-xl font-bold text-slate-900">Add Quick Task</h2>
-                                <button onClick={() => setShowAddTaskModal(false)} className="text-slate-400 hover:text-slate-600">
-                                    <X className="w-6 h-6" />
-                                </button>
+            {showAddTaskModal && (
+                <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4 backdrop-blur-sm">
+                    <div className="bg-white rounded-2xl w-full max-w-sm p-6 shadow-2xl animate-in fade-in zoom-in duration-200">
+                        <div className="flex justify-between items-center mb-6">
+                            <h2 className="text-xl font-bold text-slate-900">Add Quick Task</h2>
+                            <button onClick={() => setShowAddTaskModal(false)} className="text-slate-400 hover:text-slate-600">
+                                <X className="w-6 h-6" />
+                            </button>
+                        </div>
+                        <form onSubmit={handleAddTask} className="space-y-4">
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Task Title</label>
+                                <input
+                                    type="text"
+                                    required
+                                    value={newTask.title}
+                                    onChange={(e) => setNewTask({ ...newTask, title: e.target.value })}
+                                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
+                                    placeholder="e.g. Complete Lab Report"
+                                />
                             </div>
-                            <form onSubmit={handleAddTask} className="space-y-4">
+                            <div className="grid grid-cols-2 gap-4">
                                 <div>
-                                    <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Task Title</label>
+                                    <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Due Date</label>
                                     <input
-                                        type="text"
+                                        type="date"
                                         required
-                                        value={newTask.title}
-                                        onChange={(e) => setNewTask({ ...newTask, title: e.target.value })}
+                                        value={newTask.dueDate}
+                                        onChange={(e) => setNewTask({ ...newTask, dueDate: e.target.value })}
                                         className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
-                                        placeholder="e.g. Complete Lab Report"
                                     />
                                 </div>
-                                <div className="grid grid-cols-2 gap-4">
-                                    <div>
-                                        <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Due Date</label>
-                                        <input
-                                            type="date"
-                                            required
-                                            value={newTask.dueDate}
-                                            onChange={(e) => setNewTask({ ...newTask, dueDate: e.target.value })}
-                                            className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Priority</label>
-                                        <select
-                                            value={newTask.priority}
-                                            onChange={(e) => setNewTask({ ...newTask, priority: e.target.value })}
-                                            className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
-                                        >
-                                            <option value="low">Low</option>
-                                            <option value="medium">Medium</option>
-                                            <option value="high">High</option>
-                                        </select>
-                                    </div>
+                                <div>
+                                    <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Priority</label>
+                                    <select
+                                        value={newTask.priority}
+                                        onChange={(e) => setNewTask({ ...newTask, priority: e.target.value })}
+                                        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
+                                    >
+                                        <option value="low">Low</option>
+                                        <option value="medium">Medium</option>
+                                        <option value="high">High</option>
+                                    </select>
                                 </div>
-                                <button type="submit" className="w-full px-4 py-3 bg-indigo-600 text-white font-medium rounded-xl hover:bg-indigo-700 transition-colors shadow-lg shadow-indigo-200 mt-2">
-                                    Create Task
-                                </button>
-                            </form>
-                        </div>
+                            </div>
+                            <button type="submit" className="w-full px-4 py-3 bg-indigo-600 text-white font-medium rounded-xl hover:bg-indigo-700 transition-colors shadow-lg shadow-indigo-200 mt-2">
+                                Create Task
+                            </button>
+                        </form>
                     </div>
-                )
-            }
+                </div>
+            )}
 
             {/* Ask Question Modal */}
-            {
-                showAskModal && (
-                    <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4 backdrop-blur-sm">
-                        <div className="bg-white rounded-2xl w-full max-w-2xl p-6 md:p-8 shadow-2xl animate-in fade-in zoom-in duration-200">
-                            <div className="flex justify-between items-center mb-6">
-                                <h2 className="text-2xl font-bold text-slate-900">Ask a Question</h2>
-                                <button onClick={() => setShowAskModal(false)} className="text-slate-400 hover:text-slate-600">
-                                    <X className="w-6 h-6" />
+            {showAskModal && (
+                <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4 backdrop-blur-sm">
+                    <div className="bg-white rounded-2xl w-full max-w-2xl p-6 md:p-8 shadow-2xl animate-in fade-in zoom-in duration-200">
+                        <div className="flex justify-between items-center mb-6">
+                            <h2 className="text-2xl font-bold text-slate-900">Ask a Question</h2>
+                            <button onClick={() => setShowAskModal(false)} className="text-slate-400 hover:text-slate-600">
+                                <X className="w-6 h-6" />
+                            </button>
+                        </div>
+                        <form onSubmit={handleAskQuestion} className="space-y-6">
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Title</label>
+                                <input
+                                    type="text"
+                                    required
+                                    value={newQuestion.title}
+                                    onChange={(e) => setNewQuestion({ ...newQuestion, title: e.target.value })}
+                                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
+                                    placeholder="e.g. Understanding Recursion"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Description</label>
+                                <textarea
+                                    required
+                                    rows={5}
+                                    value={newQuestion.content}
+                                    onChange={(e) => setNewQuestion({ ...newQuestion, content: e.target.value })}
+                                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-indigo-500 outline-none resize-none"
+                                    placeholder="Describe your issue or question in detail..."
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Course Code (Optional)</label>
+                                <input
+                                    type="text"
+                                    value={newQuestion.courseId}
+                                    onChange={(e) => setNewQuestion({ ...newQuestion, courseId: e.target.value })}
+                                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
+                                    placeholder="e.g. CSC201"
+                                />
+                            </div>
+                            <div className="flex gap-4 pt-2">
+                                <button type="button" onClick={() => setShowAskModal(false)} className="flex-1 px-4 py-3 bg-slate-100 text-slate-700 font-medium rounded-xl hover:bg-slate-200 transition-colors">
+                                    Cancel
+                                </button>
+                                <button type="submit" className="flex-1 px-4 py-3 bg-indigo-600 text-white font-medium rounded-xl hover:bg-indigo-700 transition-colors shadow-lg shadow-indigo-200">
+                                    Post Question
                                 </button>
                             </div>
-                            <form onSubmit={handleAskQuestion} className="space-y-6">
-                                <div>
-                                    <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Title</label>
-                                    <input
-                                        type="text"
-                                        required
-                                        value={newQuestion.title}
-                                        onChange={(e) => setNewQuestion({ ...newQuestion, title: e.target.value })}
-                                        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
-                                        placeholder="e.g. Understanding Recursion"
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Description</label>
-                                    <textarea
-                                        required
-                                        rows={5}
-                                        value={newQuestion.content}
-                                        onChange={(e) => setNewQuestion({ ...newQuestion, content: e.target.value })}
-                                        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-indigo-500 outline-none resize-none"
-                                        placeholder="Describe your issue or question in detail..."
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Course Code (Optional)</label>
-                                    <input
-                                        type="text"
-                                        value={newQuestion.courseId}
-                                        onChange={(e) => setNewQuestion({ ...newQuestion, courseId: e.target.value })}
-                                        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
-                                        placeholder="e.g. CSC201"
-                                    />
-                                </div>
-                                <div className="flex gap-4 pt-2">
-                                    <button type="button" onClick={() => setShowAskModal(false)} className="flex-1 px-4 py-3 bg-slate-100 text-slate-700 font-medium rounded-xl hover:bg-slate-200 transition-colors">
-                                        Cancel
-                                    </button>
-                                    <button type="submit" className="flex-1 px-4 py-3 bg-indigo-600 text-white font-medium rounded-xl hover:bg-indigo-700 transition-colors shadow-lg shadow-indigo-200">
-                                        Post Question
-                                    </button>
-                                </div>
-                            </form>
-                        </div>
+                        </form>
                     </div>
-                )
-            }
+                </div>
+            )}
+
             {/* Incoming Call Modal */}
-            {
-                incomingCall && (
-                    <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4 backdrop-blur-md">
-                        <div className="bg-white rounded-2xl w-full max-w-sm p-8 text-center shadow-2xl animate-in fade-in zoom-in duration-300">
-                            <div className="w-20 h-20 bg-indigo-100 rounded-full flex items-center justify-center mx-auto mb-6 animate-pulse">
-                                <PhoneIncoming className="w-10 h-10 text-indigo-600" />
-                            </div>
-                            <h3 className="text-2xl font-bold text-slate-900 mb-2">{incomingCall?.callerName}</h3>
-                            <p className="text-slate-500 mb-8">Incoming Voice Call...</p>
-                            <div className="flex gap-4 justify-center">
-                                <button
-                                    onClick={rejectCall}
-                                    className="flex-1 px-6 py-4 bg-red-100 text-red-600 rounded-full hover:bg-red-200 transition-colors flex flex-col items-center gap-2"
-                                >
-                                    <PhoneOff className="w-6 h-6" />
-                                    <span className="text-xs font-semibold uppercase tracking-wider">Decline</span>
-                                </button>
-                                <button
-                                    onClick={acceptCall}
-                                    className="flex-1 px-6 py-4 bg-green-500 text-white rounded-full hover:bg-green-600 transition-colors shadow-lg shadow-green-200 flex flex-col items-center gap-2"
-                                >
-                                    <Phone className="w-6 h-6" />
-                                    <span className="text-xs font-semibold uppercase tracking-wider">Accept</span>
-                                </button>
-                            </div>
+            {incomingCall && (
+                <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4 backdrop-blur-md">
+                    <div className="bg-white rounded-2xl w-full max-w-sm p-8 text-center shadow-2xl animate-in fade-in zoom-in duration-300">
+                        <div className="w-20 h-20 bg-indigo-100 rounded-full flex items-center justify-center mx-auto mb-6 animate-pulse">
+                            <PhoneIncoming className="w-10 h-10 text-indigo-600" />
                         </div>
-                    </div>
-                )
-            }
-
-            {/* Active Call Overlay */}
-            {
-                callActive && (
-                    <div className="fixed top-4 right-4 z-50 w-72 bg-slate-900 text-white rounded-2xl shadow-2xl overflow-hidden border border-slate-700 animate-in slide-in-from-right duration-300">
-                        <div className="p-4 bg-slate-800 flex items-center justify-between border-b border-slate-700">
-                            <div className="flex items-center gap-3">
-                                <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-                                <span className="font-semibold text-sm">Active Call</span>
-                            </div>
-                            <span className="text-xs text-slate-400 capitalize">{connectionState}</span>
-                        </div>
-                        <div className="p-6 text-center">
-                            <div className="w-16 h-16 bg-slate-700 rounded-full flex items-center justify-center mx-auto mb-4">
-                                <User className="w-8 h-8 text-slate-400" />
-                            </div>
-                            <div className="text-sm text-slate-400 mb-6">Connected</div>
-
+                        <h3 className="text-2xl font-bold text-slate-900 mb-2">{incomingCall?.callerName}</h3>
+                        <p className="text-slate-500 mb-8">Incoming Voice Call...</p>
+                        <div className="flex gap-4 justify-center">
                             <button
-                                onClick={endCall}
-                                className="w-full py-3 bg-red-500 hover:bg-red-600 text-white rounded-xl font-medium transition-colors flex items-center justify-center gap-2"
+                                onClick={rejectCall}
+                                className="flex-1 px-6 py-4 bg-red-100 text-red-600 rounded-full hover:bg-red-200 transition-colors flex flex-col items-center gap-2"
                             >
-                                <PhoneOff className="w-5 h-5" />
-                                End Call
+                                <PhoneOff className="w-6 h-6" />
+                                <span className="text-xs font-semibold uppercase tracking-wider">Decline</span>
+                            </button>
+                            <button
+                                onClick={acceptCall}
+                                className="flex-1 px-6 py-4 bg-green-500 text-white rounded-full hover:bg-green-600 transition-colors shadow-lg shadow-green-200 flex flex-col items-center gap-2"
+                            >
+                                <Phone className="w-6 h-6" />
+                                <span className="text-xs font-semibold uppercase tracking-wider">Accept</span>
                             </button>
                         </div>
                     </div>
-                )}
+                </div>
+            )}
+
+            {/* Active Call Overlay */}
+            {callActive && (
+                <div className="fixed top-4 right-4 z-50 w-72 bg-slate-900 text-white rounded-2xl shadow-2xl overflow-hidden border border-slate-700 animate-in slide-in-from-right duration-300">
+                    <div className="p-4 bg-slate-800 flex items-center justify-between border-b border-slate-700">
+                        <div className="flex items-center gap-3">
+                            <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+                            <span className="font-semibold text-sm">Active Call</span>
+                        </div>
+                        <span className="text-xs text-slate-400 capitalize">{connectionState}</span>
+                    </div>
+                    <div className="p-6 text-center">
+                        <div className="w-16 h-16 bg-slate-700 rounded-full flex items-center justify-center mx-auto mb-4">
+                            <User className="w-8 h-8 text-slate-400" />
+                        </div>
+                        <div className="text-sm text-slate-400 mb-6">Connected</div>
+
+                        <button
+                            onClick={endCall}
+                            className="w-full py-3 bg-red-500 hover:bg-red-600 text-white rounded-xl font-medium transition-colors flex items-center justify-center gap-2"
+                        >
+                            <PhoneOff className="w-5 h-5" />
+                            End Call
+                        </button>
+                    </div>
+                </div>
+            )}
 
             {/* User Search Modal */}
             {showUserSearchModal && (
@@ -1237,7 +1329,7 @@ const Communication: React.FC = () => {
 
             {/* Hidden Audio Element for Remote Stream */}
             <audio ref={remoteAudioRef} autoPlay className="hidden" />
-        </div >
+        </div>
     );
 };
 
