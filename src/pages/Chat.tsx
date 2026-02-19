@@ -263,6 +263,7 @@ const Communication: React.FC = () => {
                     APPWRITE_CONFIG.DATABASE_ID,
                     APPWRITE_CONFIG.MESSAGES_COLLECTION_ID,
                     [
+                        Query.equal("roomId", roomId),
                         Query.orderAsc("$createdAt"),
                         Query.limit(100)
                     ]
@@ -365,6 +366,9 @@ const Communication: React.FC = () => {
                 }
 
                 if (response.events.includes("databases.*.collections.*.documents.*.create")) {
+                    // SCOPE CHECK: Only add if message belongs to current room
+                    if (payload.roomId !== roomId) return;
+
                     // Check for audio attachment
                     let audioUrl = payload.audioUrl;
                     if (!audioUrl && payload.fileId) {
@@ -443,7 +447,7 @@ const Communication: React.FC = () => {
             unsubscribeQuestions();
             unsubscribeAnswers();
         };
-    }, [user]);
+    }, [user, roomId]);
 
     useEffect(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -632,6 +636,7 @@ const Communication: React.FC = () => {
                     body: newMessage,
                     userId: user.$id,
                     username: user.name,
+                    roomId: roomId,
                     fileId: fileId, // Using legacy field for compatibility as per user codebase
                     fileName: attachedFile?.name,
                     attachments: fileId ? [fileId] : [], // Populate both for robustness
