@@ -1,3 +1,19 @@
+import React, { useState, useEffect, useRef } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
+import { useAuth } from "@/context/AuthContext";
+import { databases, client, storage, APPWRITE_CONFIG } from "@/lib/appwrite";
+import { ID, Query } from "appwrite";
+import { format } from "date-fns";
+import {
+    ArrowLeft,
+    Send,
+    Paperclip,
+    Mic,
+    Loader2,
+    Phone,
+    X
+} from "lucide-react";
+import type { ChatMessage } from '../types';
 
 export default function DirectMessage() {
     const { userId: targetUserId } = useParams<{ userId: string }>();
