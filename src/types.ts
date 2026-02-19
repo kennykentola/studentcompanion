@@ -2,7 +2,22 @@ export interface User {
     $id: string;
     name: string;
     email: string;
-    level: number; // For gamification
+    prefs?: {
+        avatar?: string;
+        profileId?: string;
+    };
+}
+
+export interface UserProfile {
+    $id?: string;
+    userId: string;
+    matricNumber?: string;
+    nickname?: string;
+    department?: string;
+    faculty?: string;
+    university?: string;
+    avatarId?: string;
+    bio?: string;
 }
 
 export interface SubTask {
@@ -46,22 +61,27 @@ export interface ChatMessage {
 }
 
 export interface HelpAnswer {
-    id: string;
+    $id?: string;
+    id: string; // Map $id to id for UI
+    questionId: string;
     author: string;
     authorLevel: number;
     content: string;
-    timestamp: string;
+    timestamp?: string; // $createdAt
     votes: number;
+    userId: string;
 }
 
 export interface HelpQuestion {
-    id: string;
+    $id?: string;
+    id: string; // Map $id to id
     title: string;
     content: string;
     courseId: string;
     author: string;
-    timestamp: string;
+    timestamp?: string; // $createdAt
     resolved: boolean;
-    answers: HelpAnswer[];
+    answers?: HelpAnswer[]; // Virtual field, fetched separately
+    userId: string;
 }
 

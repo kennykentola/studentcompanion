@@ -9,30 +9,7 @@ import { Paperclip, Mic, Phone, Send, X, FileText, Menu, Plus, CheckCircle, Cale
 import { useWebRTC } from '@/hooks/useWebRTC';
 
 // MOCK DATA FOR HELP DESK
-const MOCK_QUESTIONS: HelpQuestion[] = [
-    {
-        id: '1',
-        title: 'Integration of React Hooks',
-        content: 'I am struggling with the nuances of useEffect dependency arrays. Can someone clarify the best practices for preventing infinite loops?',
-        courseId: 'CSC401',
-        author: 'Alex Chen',
-        timestamp: '2 hours ago',
-        resolved: false,
-        answers: []
-    },
-    {
-        id: '2',
-        title: 'Database Normalization',
-        content: 'What is the optimal strategy for 3NF in a high-velocity transactional system?',
-        courseId: 'CSC305',
-        author: 'Sarah Johnson',
-        timestamp: '5 hours ago',
-        resolved: true,
-        answers: [
-            { id: 'a1', author: 'Prof. Miller', authorLevel: 99, content: 'Focus on atomic values and transitive dependencies...', timestamp: '1 hour ago', votes: 15 },
-        ]
-    }
-];
+
 
 const Communication: React.FC = () => {
     const { user } = useAuth();
@@ -43,7 +20,7 @@ const Communication: React.FC = () => {
     const messagesEndRef = useRef<HTMLDivElement>(null);
 
     // Help Desk State
-    const [questions, setQuestions] = useState<HelpQuestion[]>(MOCK_QUESTIONS);
+    const [questions, setQuestions] = useState<HelpQuestion[]>([]);
     const [searchQuery, setSearchQuery] = useState('');
 
     // File & Audio State
@@ -88,6 +65,43 @@ const Communication: React.FC = () => {
             remoteAudioRef.current.play().catch(console.error);
         }
     }, [remoteStream]);
+
+    // Fetch Help Desk Questions
+    const fetchQuestions = async () => {
+        try {
+            const response = await databases.listDocuments(
+                APPWRITE_CONFIG.DATABASE_ID,
+                APPWRITE_CONFIG.HELP_QUESTIONS_COLLECTION_ID,
+                [Query.orderDesc("$createdAt"), Query.limit(50)]
+            );
+
+            // Map and initialize answers array
+            const mappedQuestions = response.documents.map((doc: any) => ({
+                ...doc,
+                id: doc.$id,
+                answers: [] // Will fetch answers when needed or subscribe
+            })) as HelpQuestion[];
+
+            setQuestions(mappedQuestions);
+        } catch (error) {
+            console.error("Failed to fetch questions", error);
+        }
+    };
+
+    // Fetch Answers for a Question
+    const fetchAnswers = async (questionId: string) => {
+        try {
+            const response = await databases.listDocuments(
+                APPWRITE_CONFIG.DATABASE_ID,
+                APPWRITE_CONFIG.HELP_ANSWERS_COLLECTION_ID,
+                [Query.equal("questionId", questionId), Query.orderAsc("$createdAt")]
+            );
+            return response.documents.map((doc: any) => ({ ...doc, id: doc.$id })) as any[];
+        } catch (error) {
+            console.error("Failed to fetch answers", error);
+            return [];
+        }
+    };
 
     useEffect(() => {
         if (!user) return;
@@ -171,8 +185,9 @@ const Communication: React.FC = () => {
         };
 
         fetchMessages();
+        fetchQuestions();
 
-        const unsubscribe = client.subscribe(
+        const unsubscribeMessages = client.subscribe(
             `databases.${APPWRITE_CONFIG.DATABASE_ID}.collections.${APPWRITE_CONFIG.MESSAGES_COLLECTION_ID}.documents`,
             (response: any) => {
                 const payload = response.payload as any;
@@ -202,14 +217,72 @@ const Communication: React.FC = () => {
             }
         );
 
+        // Subscribe to Help Desk Questions
+        const unsubscribeQuestions = client.subscribe(
+            `databases.${APPWRITE_CONFIG.DATABASE_ID}.collections.${APPWRITE_CONFIG.HELP_QUESTIONS_COLLECTION_ID}.documents`,
+            (response: any) => {
+                if (response.events.includes("databases.*.collections.*.documents.*.create")) {
+                    const payload = response.payload as any;
+                    const newQ = { ...payload, id: payload.$id, answers: [] } as HelpQuestion;
+                    setQuestions(prev => [newQ, ...prev]);
+                }
+            }
+        );
+
+        // Subscribe to Help Desk Answers
+        const unsubscribeAnswers = client.subscribe(
+            `databases.${APPWRITE_CONFIG.DATABASE_ID}.collections.${APPWRITE_CONFIG.HELP_ANSWERS_COLLECTION_ID}.documents`,
+            (response: any) => {
+                if (response.events.includes("databases.*.collections.*.documents.*.create")) {
+                    const payload = response.payload as any;
+                    const newA = { ...payload, id: payload.$id };
+
+                    setQuestions(prev => prev.map(q => {
+                        if (q.id === payload.questionId) {
+                            // If this question is currently selected, standard update might not reflect in selectedQuestion state
+                            // We need to handle selectedQuestion update separately or derive it from questions list
+                            const updatedAnswers = q.answers ? [...q.answers, newA] : [newA];
+                            return { ...q, answers: updatedAnswers };
+                        }
+                        return q;
+                    }));
+
+                    // Logic to update selectedQuestion if it matches
+                    setSelectedQuestion(prev => {
+                        if (prev && prev.id === payload.questionId) {
+                            return { ...prev, answers: [...(prev.answers || []), newA] };
+                        }
+                        return prev;
+                    });
+                }
+            }
+        );
+
         return () => {
-            unsubscribe();
+            unsubscribeMessages();
+            unsubscribeQuestions();
+            unsubscribeAnswers();
         };
     }, [user]);
 
     useEffect(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }, [messages, activeTab]);
+
+    // Load answers when a question is selected
+    useEffect(() => {
+        if (selectedQuestion) {
+            const loadAnswers = async () => {
+                const answers = await fetchAnswers(selectedQuestion.id);
+                setSelectedQuestion(prev => prev ? { ...prev, answers } : null);
+                // Also update the main list cache
+                setQuestions(prev => prev.map(q =>
+                    q.id === selectedQuestion.id ? { ...q, answers } : q
+                ));
+            };
+            loadAnswers();
+        }
+    }, [selectedQuestion?.id]);
 
     // Fetch Tasks when tab changes
     useEffect(() => {
@@ -231,46 +304,56 @@ const Communication: React.FC = () => {
     }, [activeTab, user]);
 
 
-    const handleAskQuestion = (e: React.FormEvent) => {
+    const handleAskQuestion = async (e: React.FormEvent) => {
         e.preventDefault();
-        const question: HelpQuestion = {
-            id: ID.unique(),
-            title: newQuestion.title,
-            content: newQuestion.content,
-            courseId: newQuestion.courseId || 'General',
-            author: user?.name || 'Anonymous',
-            timestamp: 'Just now',
-            resolved: false,
-            answers: []
-        };
-        setQuestions([question, ...questions]);
-        setShowAskModal(false);
-        setNewQuestion({ title: '', content: '', courseId: '' });
+        if (!user) return;
+
+        try {
+            await databases.createDocument(
+                APPWRITE_CONFIG.DATABASE_ID,
+                APPWRITE_CONFIG.HELP_QUESTIONS_COLLECTION_ID,
+                ID.unique(),
+                {
+                    title: newQuestion.title,
+                    content: newQuestion.content,
+                    courseId: newQuestion.courseId || 'General',
+                    author: user.name,
+                    userId: user.$id,
+                    resolved: false
+                }
+            );
+            // Real-time subscription will update the list
+            setShowAskModal(false);
+            setNewQuestion({ title: '', content: '', courseId: '' });
+        } catch (error) {
+            console.error("Failed to post question", error);
+            alert("Failed to post question. Please try again.");
+        }
     };
 
-    const handleReplySubmit = () => {
-        if (!replyContent.trim() || !selectedQuestion) return;
+    const handleReplySubmit = async () => {
+        if (!replyContent.trim() || !selectedQuestion || !user) return;
 
-        const newAnswer = {
-            id: ID.unique(),
-            author: user?.name || 'You',
-            authorLevel: 1, // Default level
-            content: replyContent,
-            timestamp: 'Just now',
-            votes: 0
-        };
-
-        const updatedQuestions = questions.map(q => {
-            if (q.id === selectedQuestion.id) {
-                return { ...q, answers: [...q.answers, newAnswer] };
-            }
-            return q;
-        });
-
-        setQuestions(updatedQuestions);
-        // Update selected question to show new answer immediately
-        setSelectedQuestion({ ...selectedQuestion, answers: [...selectedQuestion.answers, newAnswer] });
-        setReplyContent('');
+        try {
+            await databases.createDocument(
+                APPWRITE_CONFIG.DATABASE_ID,
+                APPWRITE_CONFIG.HELP_ANSWERS_COLLECTION_ID,
+                ID.unique(),
+                {
+                    questionId: selectedQuestion.id,
+                    content: replyContent,
+                    author: user.name,
+                    userId: user.$id,
+                    authorLevel: 1,
+                    votes: 0
+                }
+            );
+            // Real-time subscription will update the UI
+            setReplyContent('');
+        } catch (error) {
+            console.error("Failed to post reply", error);
+            alert("Failed to post reply. Please try again.");
+        }
     };
 
     const handleAddTask = async (e: React.FormEvent) => {
@@ -444,9 +527,6 @@ const Communication: React.FC = () => {
                                     <div className="font-semibold text-slate-800 text-sm">General Chat</div>
                                     <div className="text-xs text-slate-500">Public Room</div>
                                 </div>
-                                <div className="p-3 hover:bg-white rounded-xl cursor-pointer transition-colors text-slate-600 hover:text-slate-800">
-                                    <div className="font-medium text-sm">Computer Science</div>
-                                </div>
                             </div>
                         </div>
 
@@ -610,9 +690,9 @@ const Communication: React.FC = () => {
                                         {/* Answers */}
                                         <div className="space-y-4">
                                             <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wide">
-                                                {selectedQuestion.answers.length} Answers
+                                                {selectedQuestion.answers?.length || 0} Answers
                                             </h3>
-                                            {selectedQuestion.answers.map((ans, idx) => (
+                                            {selectedQuestion.answers?.map((ans, idx) => (
                                                 <div key={idx} className="bg-slate-50 p-5 rounded-xl border border-slate-200">
                                                     <div className="flex justify-between items-start mb-2">
                                                         <div className="flex items-center gap-2">
@@ -626,7 +706,7 @@ const Communication: React.FC = () => {
                                                     <p className="text-slate-600 text-sm">{ans.content}</p>
                                                 </div>
                                             ))}
-                                            {selectedQuestion.answers.length === 0 && (
+                                            {(!selectedQuestion.answers || selectedQuestion.answers.length === 0) && (
                                                 <div className="text-center py-8 text-slate-400 text-sm italic">
                                                     No answers yet. Be the first to help!
                                                 </div>
@@ -698,64 +778,96 @@ const Communication: React.FC = () => {
                                                     </div>
                                                     <div className="flex items-center gap-1 bg-slate-100 px-2 py-1 rounded-lg">
                                                         <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" /></svg>
-                                                        <span>{q.answers.length}</span>
+                                                        <span>{q.answers?.length || 0}</span>
                                                     </div>
                                                 </div>
                                             </div>
                                         ))}
+
                                     </div>
                                 </div>
                             </>
                         )}
                     </div>
                 ) : (
-                    // Assignments Tab
-                    <div className="h-full bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col">
-                        <div className="p-4 md:p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+                    // Assignments Tab - Premium Redesign
+                    <div className="h-full bg-slate-50/50 rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col relative">
+                        {/* Header */}
+                        <div className="p-6 bg-white/80 backdrop-blur-xl border-b border-slate-200 flex justify-between items-center sticky top-0 z-10">
                             <div>
-                                <h2 className="text-lg font-bold text-slate-800">My Assignments</h2>
-                                <p className="text-xs text-slate-500">Manage tasks without leaving chat</p>
+                                <h2 className="text-xl font-bold text-slate-900 tracking-tight">Assignments</h2>
+                                <p className="text-xs font-medium text-slate-500">Track your academic progress</p>
                             </div>
                             <button
                                 onClick={() => setShowAddTaskModal(true)}
-                                className="bg-indigo-600 text-white px-3 py-2 md:px-4 md:py-2.5 rounded-xl text-xs md:text-sm font-medium hover:bg-indigo-700 transition-colors shadow-lg shadow-indigo-200 flex items-center gap-1"
+                                className="group bg-slate-900 hover:bg-indigo-600 text-white px-4 py-2.5 rounded-xl text-sm font-semibold transition-all duration-300 shadow-lg shadow-slate-200 hover:shadow-indigo-200 flex items-center gap-2"
                             >
-                                <Plus className="w-4 h-4" />
-                                <span className="hidden md:inline">Add Task</span>
+                                <Plus className="w-4 h-4 group-hover:rotate-90 transition-transform duration-300" />
+                                <span className="hidden md:inline">New Task</span>
                             </button>
                         </div>
 
-                        <div className="flex-1 overflow-y-auto p-4 md:p-6 pb-20">
+                        {/* Content */}
+                        <div className="flex-1 overflow-y-auto p-4 md:p-6 pb-24 scroll-smooth">
                             {tasks.length > 0 ? (
-                                <div className="space-y-3 max-w-3xl mx-auto">
+                                <div className="grid gap-4 max-w-4xl mx-auto">
                                     {tasks.map((task) => (
-                                        <div key={task.$id} className="bg-white p-4 rounded-xl border border-slate-200 hover:border-indigo-200 transition-colors shadow-sm flex items-start gap-3">
-                                            <button className="mt-0.5 text-slate-400 hover:text-green-600 transition-colors">
-                                                <CheckCircle className="w-5 h-5" />
-                                            </button>
-                                            <div className="flex-1">
-                                                <h3 className="font-semibold text-slate-800 text-sm mb-1">{task.title}</h3>
-                                                <div className="flex items-center gap-3 text-xs text-slate-500">
-                                                    {task.dueDate && (
-                                                        <div className="flex items-center gap-1">
-                                                            <Calendar className="w-3 h-3" />
-                                                            <span>{format(new Date(task.dueDate), "MMM d, yyyy")}</span>
+                                        <div
+                                            key={task.$id}
+                                            className="group bg-white p-5 rounded-2xl border border-slate-100 hover:border-indigo-100 shadow-sm hover:shadow-md transition-all duration-200 relative overflow-hidden"
+                                        >
+                                            <div className="absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b from-indigo-500 to-purple-500 opacity-0 group-hover:opacity-100 transition-opacity" />
+
+                                            <div className="flex items-start gap-4">
+                                                <button className="mt-1 text-slate-300 hover:text-green-500 transition-colors transform hover:scale-110 active:scale-95">
+                                                    <div className="w-5 h-5 rounded-full border-2 border-current flex items-center justify-center">
+                                                        <div className="w-2.5 h-2.5 rounded-full bg-current opacity-0 hover:opacity-100 transition-opacity" />
+                                                    </div>
+                                                </button>
+
+                                                <div className="flex-1 min-w-0">
+                                                    <div className="flex justify-between items-start mb-1">
+                                                        <h3 className="font-bold text-slate-800 text-base truncate pr-8">{task.title}</h3>
+                                                        <div className="flex shrink-0">
+                                                            <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-lg ${task.priority === 'high' ? 'bg-rose-50 text-rose-600' :
+                                                                task.priority === 'medium' ? 'bg-amber-50 text-amber-600' :
+                                                                    'bg-emerald-50 text-emerald-600'
+                                                                }`}>
+                                                                {task.priority || 'Medium'}
+                                                            </span>
                                                         </div>
-                                                    )}
-                                                    <span className={`capitalize px-2 py-0.5 rounded ${task.priority === 'high' ? 'bg-red-50 text-red-600' :
-                                                        task.priority === 'medium' ? 'bg-amber-50 text-amber-600' :
-                                                            'bg-green-50 text-green-600'
-                                                        }`}>
-                                                        {task.priority || 'Medium'} Priority
-                                                    </span>
+                                                    </div>
+
+                                                    <p className="text-slate-500 text-sm mb-3 line-clamp-2">{task.description || "No description provided."}</p>
+
+                                                    <div className="flex items-center gap-4 text-xs font-medium text-slate-400">
+                                                        {task.dueDate && (
+                                                            <div className="flex items-center gap-1.5 bg-slate-50 px-2 py-1 rounded-md text-slate-600">
+                                                                <Calendar className="w-3.5 h-3.5" />
+                                                                <span>{format(new Date(task.dueDate), "MMM d, yyyy")}</span>
+                                                            </div>
+                                                        )}
+                                                        {task.courseId && (
+                                                            <div className="flex items-center gap-1.5">
+                                                                <div className="w-1.5 h-1.5 rounded-full bg-indigo-500" />
+                                                                <span>{task.courseId}</span>
+                                                            </div>
+                                                        )}
+                                                    </div>
                                                 </div>
                                             </div>
                                         </div>
                                     ))}
                                 </div>
                             ) : (
-                                <div className="text-center py-10 text-slate-400 text-sm">
-                                    <p>No tasks yet. Create one to get started!</p>
+                                <div className="h-full flex flex-col items-center justify-center text-center p-8">
+                                    <div className="w-16 h-16 bg-indigo-50 rounded-2xl flex items-center justify-center mb-4 text-indigo-500">
+                                        <CheckCircle className="w-8 h-8" />
+                                    </div>
+                                    <h3 className="text-lg font-bold text-slate-900 mb-1">All Caught Up!</h3>
+                                    <p className="text-slate-500 text-sm max-w-xs mx-auto">
+                                        You have no pending assignments. Take a break or add a new task to stay ahead.
+                                    </p>
                                 </div>
                             )}
                         </div>
@@ -764,172 +876,180 @@ const Communication: React.FC = () => {
             </div>
 
             {/* Quick Add Task Modal */}
-            {showAddTaskModal && (
-                <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4 backdrop-blur-sm">
-                    <div className="bg-white rounded-2xl w-full max-w-sm p-6 shadow-2xl animate-in fade-in zoom-in duration-200">
-                        <div className="flex justify-between items-center mb-6">
-                            <h2 className="text-xl font-bold text-slate-900">Add Quick Task</h2>
-                            <button onClick={() => setShowAddTaskModal(false)} className="text-slate-400 hover:text-slate-600">
-                                <X className="w-6 h-6" />
-                            </button>
-                        </div>
-                        <form onSubmit={handleAddTask} className="space-y-4">
-                            <div>
-                                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Task Title</label>
-                                <input
-                                    type="text"
-                                    required
-                                    value={newTask.title}
-                                    onChange={(e) => setNewTask({ ...newTask, title: e.target.value })}
-                                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
-                                    placeholder="e.g. Complete Lab Report"
-                                />
+            {
+                showAddTaskModal && (
+                    <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4 backdrop-blur-sm">
+                        <div className="bg-white rounded-2xl w-full max-w-sm p-6 shadow-2xl animate-in fade-in zoom-in duration-200">
+                            <div className="flex justify-between items-center mb-6">
+                                <h2 className="text-xl font-bold text-slate-900">Add Quick Task</h2>
+                                <button onClick={() => setShowAddTaskModal(false)} className="text-slate-400 hover:text-slate-600">
+                                    <X className="w-6 h-6" />
+                                </button>
                             </div>
-                            <div className="grid grid-cols-2 gap-4">
+                            <form onSubmit={handleAddTask} className="space-y-4">
                                 <div>
-                                    <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Due Date</label>
+                                    <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Task Title</label>
                                     <input
-                                        type="date"
+                                        type="text"
                                         required
-                                        value={newTask.dueDate}
-                                        onChange={(e) => setNewTask({ ...newTask, dueDate: e.target.value })}
+                                        value={newTask.title}
+                                        onChange={(e) => setNewTask({ ...newTask, title: e.target.value })}
                                         className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
+                                        placeholder="e.g. Complete Lab Report"
+                                    />
+                                </div>
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Due Date</label>
+                                        <input
+                                            type="date"
+                                            required
+                                            value={newTask.dueDate}
+                                            onChange={(e) => setNewTask({ ...newTask, dueDate: e.target.value })}
+                                            className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Priority</label>
+                                        <select
+                                            value={newTask.priority}
+                                            onChange={(e) => setNewTask({ ...newTask, priority: e.target.value })}
+                                            className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
+                                        >
+                                            <option value="low">Low</option>
+                                            <option value="medium">Medium</option>
+                                            <option value="high">High</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <button type="submit" className="w-full px-4 py-3 bg-indigo-600 text-white font-medium rounded-xl hover:bg-indigo-700 transition-colors shadow-lg shadow-indigo-200 mt-2">
+                                    Create Task
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                )
+            }
+
+            {/* Ask Question Modal */}
+            {
+                showAskModal && (
+                    <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4 backdrop-blur-sm">
+                        <div className="bg-white rounded-2xl w-full max-w-2xl p-6 md:p-8 shadow-2xl animate-in fade-in zoom-in duration-200">
+                            <div className="flex justify-between items-center mb-6">
+                                <h2 className="text-2xl font-bold text-slate-900">Ask a Question</h2>
+                                <button onClick={() => setShowAskModal(false)} className="text-slate-400 hover:text-slate-600">
+                                    <X className="w-6 h-6" />
+                                </button>
+                            </div>
+                            <form onSubmit={handleAskQuestion} className="space-y-6">
+                                <div>
+                                    <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Title</label>
+                                    <input
+                                        type="text"
+                                        required
+                                        value={newQuestion.title}
+                                        onChange={(e) => setNewQuestion({ ...newQuestion, title: e.target.value })}
+                                        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
+                                        placeholder="e.g. Understanding Recursion"
                                     />
                                 </div>
                                 <div>
-                                    <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Priority</label>
-                                    <select
-                                        value={newTask.priority}
-                                        onChange={(e) => setNewTask({ ...newTask, priority: e.target.value })}
-                                        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
-                                    >
-                                        <option value="low">Low</option>
-                                        <option value="medium">Medium</option>
-                                        <option value="high">High</option>
-                                    </select>
+                                    <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Description</label>
+                                    <textarea
+                                        required
+                                        rows={5}
+                                        value={newQuestion.content}
+                                        onChange={(e) => setNewQuestion({ ...newQuestion, content: e.target.value })}
+                                        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-indigo-500 outline-none resize-none"
+                                        placeholder="Describe your issue or question in detail..."
+                                    />
                                 </div>
-                            </div>
-                            <button type="submit" className="w-full px-4 py-3 bg-indigo-600 text-white font-medium rounded-xl hover:bg-indigo-700 transition-colors shadow-lg shadow-indigo-200 mt-2">
-                                Create Task
-                            </button>
-                        </form>
-                    </div>
-                </div>
-            )}
-
-            {/* Ask Question Modal */}
-            {showAskModal && (
-                <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4 backdrop-blur-sm">
-                    <div className="bg-white rounded-2xl w-full max-w-2xl p-6 md:p-8 shadow-2xl animate-in fade-in zoom-in duration-200">
-                        <div className="flex justify-between items-center mb-6">
-                            <h2 className="text-2xl font-bold text-slate-900">Ask a Question</h2>
-                            <button onClick={() => setShowAskModal(false)} className="text-slate-400 hover:text-slate-600">
-                                <X className="w-6 h-6" />
-                            </button>
+                                <div>
+                                    <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Course Code (Optional)</label>
+                                    <input
+                                        type="text"
+                                        value={newQuestion.courseId}
+                                        onChange={(e) => setNewQuestion({ ...newQuestion, courseId: e.target.value })}
+                                        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
+                                        placeholder="e.g. CSC201"
+                                    />
+                                </div>
+                                <div className="flex gap-4 pt-2">
+                                    <button type="button" onClick={() => setShowAskModal(false)} className="flex-1 px-4 py-3 bg-slate-100 text-slate-700 font-medium rounded-xl hover:bg-slate-200 transition-colors">
+                                        Cancel
+                                    </button>
+                                    <button type="submit" className="flex-1 px-4 py-3 bg-indigo-600 text-white font-medium rounded-xl hover:bg-indigo-700 transition-colors shadow-lg shadow-indigo-200">
+                                        Post Question
+                                    </button>
+                                </div>
+                            </form>
                         </div>
-                        <form onSubmit={handleAskQuestion} className="space-y-6">
-                            <div>
-                                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Title</label>
-                                <input
-                                    type="text"
-                                    required
-                                    value={newQuestion.title}
-                                    onChange={(e) => setNewQuestion({ ...newQuestion, title: e.target.value })}
-                                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
-                                    placeholder="e.g. Understanding Recursion"
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Description</label>
-                                <textarea
-                                    required
-                                    rows={5}
-                                    value={newQuestion.content}
-                                    onChange={(e) => setNewQuestion({ ...newQuestion, content: e.target.value })}
-                                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-indigo-500 outline-none resize-none"
-                                    placeholder="Describe your issue or question in detail..."
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Course Code (Optional)</label>
-                                <input
-                                    type="text"
-                                    value={newQuestion.courseId}
-                                    onChange={(e) => setNewQuestion({ ...newQuestion, courseId: e.target.value })}
-                                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
-                                    placeholder="e.g. CSC201"
-                                />
-                            </div>
-                            <div className="flex gap-4 pt-2">
-                                <button type="button" onClick={() => setShowAskModal(false)} className="flex-1 px-4 py-3 bg-slate-100 text-slate-700 font-medium rounded-xl hover:bg-slate-200 transition-colors">
-                                    Cancel
-                                </button>
-                                <button type="submit" className="flex-1 px-4 py-3 bg-indigo-600 text-white font-medium rounded-xl hover:bg-indigo-700 transition-colors shadow-lg shadow-indigo-200">
-                                    Post Question
-                                </button>
-                            </div>
-                        </form>
                     </div>
-                </div>
-            )}
+                )
+            }
             {/* Incoming Call Modal */}
-            {incomingCall && (
-                <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4 backdrop-blur-md">
-                    <div className="bg-white rounded-2xl w-full max-w-sm p-8 text-center shadow-2xl animate-in fade-in zoom-in duration-300">
-                        <div className="w-20 h-20 bg-indigo-100 rounded-full flex items-center justify-center mx-auto mb-6 animate-pulse">
-                            <PhoneIncoming className="w-10 h-10 text-indigo-600" />
-                        </div>
-                        <h3 className="text-2xl font-bold text-slate-900 mb-2">{incomingCall.callerName}</h3>
-                        <p className="text-slate-500 mb-8">Incoming Voice Call...</p>
-                        <div className="flex gap-4 justify-center">
-                            <button
-                                onClick={rejectCall}
-                                className="flex-1 px-6 py-4 bg-red-100 text-red-600 rounded-full hover:bg-red-200 transition-colors flex flex-col items-center gap-2"
-                            >
-                                <PhoneOff className="w-6 h-6" />
-                                <span className="text-xs font-semibold uppercase tracking-wider">Decline</span>
-                            </button>
-                            <button
-                                onClick={acceptCall}
-                                className="flex-1 px-6 py-4 bg-green-500 text-white rounded-full hover:bg-green-600 transition-colors shadow-lg shadow-green-200 flex flex-col items-center gap-2"
-                            >
-                                <Phone className="w-6 h-6" />
-                                <span className="text-xs font-semibold uppercase tracking-wider">Accept</span>
-                            </button>
+            {
+                incomingCall && (
+                    <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4 backdrop-blur-md">
+                        <div className="bg-white rounded-2xl w-full max-w-sm p-8 text-center shadow-2xl animate-in fade-in zoom-in duration-300">
+                            <div className="w-20 h-20 bg-indigo-100 rounded-full flex items-center justify-center mx-auto mb-6 animate-pulse">
+                                <PhoneIncoming className="w-10 h-10 text-indigo-600" />
+                            </div>
+                            <h3 className="text-2xl font-bold text-slate-900 mb-2">{incomingCall?.callerName}</h3>
+                            <p className="text-slate-500 mb-8">Incoming Voice Call...</p>
+                            <div className="flex gap-4 justify-center">
+                                <button
+                                    onClick={rejectCall}
+                                    className="flex-1 px-6 py-4 bg-red-100 text-red-600 rounded-full hover:bg-red-200 transition-colors flex flex-col items-center gap-2"
+                                >
+                                    <PhoneOff className="w-6 h-6" />
+                                    <span className="text-xs font-semibold uppercase tracking-wider">Decline</span>
+                                </button>
+                                <button
+                                    onClick={acceptCall}
+                                    className="flex-1 px-6 py-4 bg-green-500 text-white rounded-full hover:bg-green-600 transition-colors shadow-lg shadow-green-200 flex flex-col items-center gap-2"
+                                >
+                                    <Phone className="w-6 h-6" />
+                                    <span className="text-xs font-semibold uppercase tracking-wider">Accept</span>
+                                </button>
+                            </div>
                         </div>
                     </div>
-                </div>
-            )}
+                )
+            }
 
             {/* Active Call Overlay */}
-            {callActive && (
-                <div className="fixed top-4 right-4 z-50 w-72 bg-slate-900 text-white rounded-2xl shadow-2xl overflow-hidden border border-slate-700 animate-in slide-in-from-right duration-300">
-                    <div className="p-4 bg-slate-800 flex items-center justify-between border-b border-slate-700">
-                        <div className="flex items-center gap-3">
-                            <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-                            <span className="font-semibold text-sm">Active Call</span>
+            {
+                callActive && (
+                    <div className="fixed top-4 right-4 z-50 w-72 bg-slate-900 text-white rounded-2xl shadow-2xl overflow-hidden border border-slate-700 animate-in slide-in-from-right duration-300">
+                        <div className="p-4 bg-slate-800 flex items-center justify-between border-b border-slate-700">
+                            <div className="flex items-center gap-3">
+                                <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+                                <span className="font-semibold text-sm">Active Call</span>
+                            </div>
+                            <span className="text-xs text-slate-400 capitalize">{connectionState}</span>
                         </div>
-                        <span className="text-xs text-slate-400 capitalize">{connectionState}</span>
-                    </div>
-                    <div className="p-6 text-center">
-                        <div className="w-16 h-16 bg-slate-700 rounded-full flex items-center justify-center mx-auto mb-4">
-                            <User className="w-8 h-8 text-slate-400" />
-                        </div>
-                        <div className="text-sm text-slate-400 mb-6">Connected</div>
+                        <div className="p-6 text-center">
+                            <div className="w-16 h-16 bg-slate-700 rounded-full flex items-center justify-center mx-auto mb-4">
+                                <User className="w-8 h-8 text-slate-400" />
+                            </div>
+                            <div className="text-sm text-slate-400 mb-6">Connected</div>
 
-                        <button
-                            onClick={endCall}
-                            className="w-full py-3 bg-red-500 hover:bg-red-600 text-white rounded-xl font-medium transition-colors flex items-center justify-center gap-2"
-                        >
-                            <PhoneOff className="w-5 h-5" />
-                            End Call
-                        </button>
+                            <button
+                                onClick={endCall}
+                                className="w-full py-3 bg-red-500 hover:bg-red-600 text-white rounded-xl font-medium transition-colors flex items-center justify-center gap-2"
+                            >
+                                <PhoneOff className="w-5 h-5" />
+                                End Call
+                            </button>
+                        </div>
+                        {/* Hidden Audio Element for Remote Stream */}
+                        <audio ref={remoteAudioRef} autoPlay className="hidden" />
                     </div>
-                    {/* Hidden Audio Element for Remote Stream */}
-                    <audio ref={remoteAudioRef} autoPlay className="hidden" />
-                </div>
-            )}
-        </div>
+                )
+            }
+        </div >
     );
 };
 
