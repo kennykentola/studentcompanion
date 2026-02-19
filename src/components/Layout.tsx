@@ -28,7 +28,7 @@ export default function Layout() {
             <div className="flex flex-col min-h-screen">
                 {/* Offset content for sidebar on desktop */}
                 <Header onMenuClick={() => setMobileMenuOpen(true)} />
-                <main className="flex-1 p-6 md:pl-72 pt-6">
+                <main className="flex-1 p-4 md:p-6 md:pl-72 pt-6">
                     <Outlet />
                 </main>
             </div>

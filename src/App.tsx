@@ -14,6 +14,7 @@ import Grades from "@/pages/Grades";
 import Chat from "@/pages/Chat";
 import Calculator from "@/pages/Calculator";
 import Settings from "@/pages/Settings";
+import DirectMessage from "@/pages/DirectMessage";
 
 function App() {
   return (
@@ -33,6 +34,7 @@ function App() {
               <Route path="/chat" element={<Chat />} />
               <Route path="/calculator" element={<Calculator />} />
               <Route path="/settings" element={<Settings />} />
+              <Route path="/chat/dm/:userId" element={<DirectMessage />} />
             </Route>
           </Route>
 

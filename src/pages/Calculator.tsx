@@ -78,11 +78,11 @@ export default function Calculator() {
                             <Table>
                                 <TableHeader>
                                     <TableRow>
-                                        <TableHead>Course Code</TableHead>
-                                        <TableHead className="w-[100px]">Units (CU)</TableHead>
-                                        <TableHead className="w-[120px]">Grade</TableHead>
-                                        <TableHead className="w-[100px] text-right">Points (GP)</TableHead>
-                                        <TableHead className="w-[50px]"></TableHead>
+                                        <TableHead className="px-2">Course</TableHead>
+                                        <TableHead className="w-[70px] px-2 text-center">Units</TableHead>
+                                        <TableHead className="w-[80px] px-2">Grade</TableHead>
+                                        <TableHead className="w-[60px] px-2 text-right">GP</TableHead>
+                                        <TableHead className="w-[40px] px-2"></TableHead>
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
@@ -108,7 +108,7 @@ export default function Calculator() {
                                                     value={row.grade}
                                                     onValueChange={(val) => updateRow(row.id, "grade", val)}
                                                 >
-                                                    <SelectTrigger>
+                                                    <SelectTrigger className="h-9 px-2">
                                                         <SelectValue />
                                                     </SelectTrigger>
                                                     <SelectContent>
@@ -150,9 +150,9 @@ export default function Calculator() {
                             <span className="text-muted-foreground">Total Points (TGP)</span>
                             <span className="font-bold text-lg">{tgp}</span>
                         </div>
-                        <div className="mt-6 pt-4 text-center">
-                            <span className="block text-sm text-muted-foreground mb-1">Your CGPA</span>
-                            <div className="text-3xl md:text-5xl font-extrabold text-primary break-all">{cgpa.toFixed(2)}</div>
+                        <div className="mt-4 pt-4 text-center bg-primary/5 rounded-2xl p-4">
+                            <span className="block text-xs text-muted-foreground font-medium uppercase tracking-wider mb-2">Your CGPA</span>
+                            <div className="text-4xl md:text-5xl font-black text-primary tracking-tight">{cgpa.toFixed(2)}</div>
                         </div>
 
                         <Button

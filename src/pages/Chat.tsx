@@ -204,10 +204,7 @@ const Communication: React.FC = () => {
         });
 
         setShowUserSearchModal(false);
-        setActiveChatUser(otherUser);
-        // updateRoom(dmRoomId); // Placeholder function
-        navigate(`?room=${dmRoomId}`); // Using URL query param is a good safe bet
-        // window.location.reload(); // Quick dirty fix to force state update if logic is complex, but better to update state
+        navigate(`/chat/dm/${otherUser.userId}`);
     };
 
     useEffect(() => {
@@ -735,7 +732,7 @@ const Communication: React.FC = () => {
                                         <button
                                             key={chat.roomId}
                                             onClick={() => {
-                                                navigate(`?room=${chat.roomId}`);
+                                                navigate(`/chat/dm/${chat.user.userId}`);
                                                 setShowMobileSidebar(false);
                                             }}
                                             className={`w-full text-left px-3 py-2.5 rounded-xl transition-all flex items-center gap-3 group ${roomId === chat.roomId

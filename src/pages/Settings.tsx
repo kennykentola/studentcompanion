@@ -237,16 +237,16 @@ export default function Settings() {
                 </Card>
 
                 <Card>
-                    <CardHeader>
+                    <CardHeader className="p-4 md:p-6">
                         <div className="flex items-center gap-2">
                             <GraduationCap className="h-5 w-5 text-indigo-600" />
-                            <CardTitle>Academic Preferences</CardTitle>
+                            <CardTitle className="text-xl">Academic Preferences</CardTitle>
                         </div>
                         <CardDescription>
                             Configure your grading system.
                         </CardDescription>
                     </CardHeader>
-                    <CardContent>
+                    <CardContent className="p-4 md:p-6 pt-0">
                         <div className="grid gap-2">
                             <Label htmlFor="grading-scale">Grading Scale</Label>
                             <Select
@@ -269,16 +269,16 @@ export default function Settings() {
                 </Card>
 
                 <Card>
-                    <CardHeader>
+                    <CardHeader className="p-4 md:p-6">
                         <div className="flex items-center gap-2">
                             <Bell className="h-5 w-5 text-indigo-600" />
-                            <CardTitle>Notifications</CardTitle>
+                            <CardTitle className="text-xl">Notifications</CardTitle>
                         </div>
                         <CardDescription>
                             Configure how you receive alerts.
                         </CardDescription>
                     </CardHeader>
-                    <CardContent>
+                    <CardContent className="p-4 md:p-6 pt-0">
                         <div className="flex items-center space-x-2">
                             <input type="checkbox" id="email-notifs" className="rounded border-gray-300" defaultChecked />
                             <Label htmlFor="email-notifs">Email Notifications</Label>
