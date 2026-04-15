@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "@/context/AuthContext";
-import { Bell, Search, Menu, Check } from "lucide-react";
+import { useTheme } from "@/context/ThemeContext";
+import { Bell, Search, Menu, Check, Sun, Moon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -18,6 +19,7 @@ interface HeaderProps {
 
 export function Header({ onMenuClick }: HeaderProps) {
     const { user } = useAuth();
+    const { theme, toggleTheme } = useTheme();
     const [notifications, setNotifications] = useState<any[]>([]);
     const [unreadCount, setUnreadCount] = useState(0);
 
@@ -51,7 +53,7 @@ export function Header({ onMenuClick }: HeaderProps) {
                     const newNotif = response.payload;
                     if (newNotif.userId === user?.$id) {
                         setNotifications(prev => [newNotif, ...prev]);
-                        setUnreadCount(prev => prev + 1);
+                        setUnreadCount(prev => (prev as number) + 1);
                     }
                 }
             }
@@ -70,8 +72,8 @@ export function Header({ onMenuClick }: HeaderProps) {
                 id,
                 { isRead: true }
             );
-            setNotifications(notifications.map(n => n.$id === id ? { ...n, isRead: true } : n));
-            setUnreadCount(prev => Math.max(0, prev - 1));
+            setNotifications(notifications.map((n: any) => n.$id === id ? { ...n, isRead: true } : n));
+            setUnreadCount(prev => Math.max(0, (prev as number) - 1));
         } catch (error) {
             console.error("Failed to mark read");
         }
@@ -135,6 +137,14 @@ export function Header({ onMenuClick }: HeaderProps) {
                         </div>
                     </PopoverContent>
                 </Popover>
+
+                <Button variant="ghost" size="icon" onClick={toggleTheme}>
+                    {theme === 'dark' ? (
+                        <Sun className="h-5 w-5 text-amber-400" />
+                    ) : (
+                        <Moon className="h-5 w-5 text-slate-500" />
+                    )}
+                </Button>
 
                 <div className="flex items-center gap-3">
                     <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center text-primary font-medium text-sm">

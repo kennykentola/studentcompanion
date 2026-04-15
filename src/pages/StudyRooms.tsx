@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { databases, APPWRITE_CONFIG } from "@/lib/appwrite";
 import { ID, Query } from "appwrite";
-import { Plus, Loader2, Users, MessageSquare, Send, ChevronLeft, BookOpen } from "lucide-react";
+import { Plus, Loader2, Users, MessageSquare, Send, ChevronLeft, BookOpen, Lock, Unlock, RefreshCw, Share2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -16,6 +16,8 @@ interface StudyRoom {
     description: string;
     createdBy: string;
     createdByName: string;
+    isPrivate: boolean;
+    roomCode?: string;
 }
 
 interface RoomMessage {
@@ -40,10 +42,18 @@ export default function StudyRooms() {
     const [isDialogOpen, setIsDialogOpen] = useState(false);
     const [creating, setCreating] = useState(false);
 
+    // Join Code State
+    const [isAccessDialogOpen, setIsAccessDialogOpen] = useState(false);
+    const [attemptRoom, setAttemptRoom] = useState<StudyRoom | null>(null);
+    const [joinCode, setJoinCode] = useState("");
+    const [joinError, setJoinError] = useState("");
+
     // Form
     const [roomName, setRoomName] = useState("");
     const [roomCourse, setRoomCourse] = useState("");
     const [roomDesc, setRoomDesc] = useState("");
+    const [isPrivate, setIsPrivate] = useState(false);
+    const [roomCode, setRoomCode] = useState("");
 
     const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -114,14 +124,45 @@ export default function StudyRooms() {
                     courseTag: roomCourse.toUpperCase(),
                     description: roomDesc,
                     createdBy: user.$id,
-                    createdByName: user.name || "Anonymous"
+                    createdByName: user.name || "Anonymous",
+                    isPrivate: isPrivate,
+                    roomCode: isPrivate ? roomCode : null
                 }
             );
-            setRooms([doc as unknown as StudyRoom, ...rooms]);
-            setRoomName(""); setRoomCourse(""); setRoomDesc("");
+            const newRoom = doc as unknown as StudyRoom;
+            setRooms([newRoom, ...rooms]);
+            setRoomName(""); setRoomCourse(""); setRoomDesc(""); setIsPrivate(false); setRoomCode("");
             setIsDialogOpen(false);
+            // Automatically enter the room you just created
+            setActiveRoom(newRoom);
         } catch (e) { console.error("Failed to create room:", e); }
         finally { setCreating(false); }
+    };
+
+    const generateCode = () => {
+        const code = Math.floor(1000 + Math.random() * 9000).toString();
+        setRoomCode(code);
+    };
+
+    const handleEntryAttempt = (room: StudyRoom) => {
+        if (!room.isPrivate || room.createdBy === user?.$id) {
+            setActiveRoom(room);
+        } else {
+            setAttemptRoom(room);
+            setJoinCode("");
+            setJoinError("");
+            setIsAccessDialogOpen(true);
+        }
+    };
+
+    const verifyCode = () => {
+        if (attemptRoom && joinCode === attemptRoom.roomCode) {
+            setActiveRoom(attemptRoom);
+            setIsAccessDialogOpen(false);
+            setAttemptRoom(null);
+        } else {
+            setJoinError("Incorrect code. Please try again.");
+        }
     };
 
     const handleSendMessage = async (e: React.FormEvent) => {
@@ -177,14 +218,21 @@ export default function StudyRooms() {
                     <div className="flex-1">
                         <div className="flex items-center gap-2">
                             <h2 className="font-black text-slate-900 text-lg">{activeRoom.name}</h2>
+                            {activeRoom.isPrivate && (
+                                <Lock className="w-4 h-4 text-rose-500" />
+                            )}
                             {activeRoom.courseTag && (
                                 <span className="text-[10px] font-black text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-lg uppercase">{activeRoom.courseTag}</span>
                             )}
                         </div>
-                        {activeRoom.description && (
-                            <p className="text-sm text-slate-400">{activeRoom.description}</p>
-                        )}
+                        <p className="text-xs text-slate-400">Created by {activeRoom.createdByName}</p>
                     </div>
+                    {activeRoom.isPrivate && activeRoom.createdBy === user?.$id && (
+                        <div className="flex items-center gap-2 bg-rose-50 px-3 py-1.5 rounded-xl border border-rose-100">
+                            <Share2 className="w-3.5 h-3.5 text-rose-500" />
+                            <span className="text-xs font-black text-rose-600 tracking-wider">CODE: {activeRoom.roomCode}</span>
+                        </div>
+                    )}
                 </div>
 
                 {/* Messages */}
@@ -256,7 +304,7 @@ export default function StudyRooms() {
                             <Plus className="mr-2 h-4 w-4" />Create Room
                         </Button>
                     </DialogTrigger>
-                    <DialogContent className="sm:max-w-md rounded-2xl">
+                    <DialogContent className="sm:max-w-md rounded-3xl">
                         <form onSubmit={handleCreateRoom}>
                             <DialogHeader>
                                 <DialogTitle className="text-xl font-bold">Create Study Room</DialogTitle>
@@ -266,10 +314,51 @@ export default function StudyRooms() {
                                     <Label>Room Name</Label>
                                     <Input value={roomName} onChange={e => setRoomName(e.target.value)} placeholder="e.g. CSC301 Exam Prep" required />
                                 </div>
-                                <div className="space-y-2">
-                                    <Label>Course Tag (optional)</Label>
-                                    <Input value={roomCourse} onChange={e => setRoomCourse(e.target.value)} placeholder="e.g. CSC301" />
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div className="space-y-2">
+                                        <Label>Course Tag</Label>
+                                        <Input value={roomCourse} onChange={e => setRoomCourse(e.target.value)} placeholder="e.g. CSC301" />
+                                    </div>
+                                    <div className="space-y-2">
+                                        <Label className="block mb-2">Privacy</Label>
+                                        <div className="flex items-center gap-2 h-10 px-1">
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    const next = !isPrivate;
+                                                    setIsPrivate(next);
+                                                    if (next && !roomCode) generateCode();
+                                                }}
+                                                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 ${isPrivate ? 'bg-indigo-600' : 'bg-slate-200'}`}
+                                            >
+                                                <span
+                                                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${isPrivate ? 'translate-x-6' : 'translate-x-1'}`}
+                                                />
+                                            </button>
+                                            <span className="text-xs font-bold text-slate-600">{isPrivate ? "Private" : "Public"}</span>
+                                        </div>
+                                    </div>
                                 </div>
+
+                                {isPrivate && (
+                                    <div className="space-y-2 bg-rose-50 p-4 rounded-2xl border border-rose-100 animate-in slide-in-from-top-2">
+                                        <div className="flex justify-between items-center mb-1">
+                                            <Label className="text-rose-700">Entry Code</Label>
+                                            <Button type="button" variant="ghost" size="sm" onClick={generateCode} className="h-7 text-rose-600 hover:text-rose-700 hover:bg-rose-100">
+                                                <RefreshCw className="w-3 h-3 mr-1" /> Random
+                                            </Button>
+                                        </div>
+                                        <Input
+                                            value={roomCode}
+                                            onChange={e => setRoomCode(e.target.value)}
+                                            placeholder="Set a code"
+                                            maxLength={10}
+                                            className="bg-white border-rose-200 text-rose-600 font-bold tracking-widest text-center text-lg h-12"
+                                        />
+                                        <p className="text-[10px] text-rose-500 font-medium">Share this code with people you want to study with.</p>
+                                    </div>
+                                )}
+
                                 <div className="space-y-2">
                                     <Label>Description (optional)</Label>
                                     <textarea
@@ -281,7 +370,7 @@ export default function StudyRooms() {
                                 </div>
                             </div>
                             <DialogFooter>
-                                <Button type="submit" disabled={creating} className="w-full bg-indigo-600 hover:bg-indigo-700">
+                                <Button type="submit" disabled={creating} className="w-full bg-indigo-600 hover:bg-indigo-700 h-12 rounded-xl text-base font-bold">
                                     {creating ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Creating...</> : "Create Room"}
                                 </Button>
                             </DialogFooter>
@@ -289,6 +378,38 @@ export default function StudyRooms() {
                     </DialogContent>
                 </Dialog>
             </div>
+
+            {/* Password Access Dialog */}
+            <Dialog open={isAccessDialogOpen} onOpenChange={setIsAccessDialogOpen}>
+                <DialogContent className="sm:max-w-[400px] rounded-3xl p-0 overflow-hidden border-none shadow-2xl">
+                    <div className="bg-indigo-600 p-8 text-center text-white">
+                        <div className="w-16 h-16 bg-white/20 rounded-2xl flex items-center justify-center mx-auto mb-4 backdrop-blur-md">
+                            <Lock className="w-8 h-8 text-white" />
+                        </div>
+                        <h2 className="text-xl font-bold">{attemptRoom?.name}</h2>
+                        <p className="text-indigo-100 text-sm mt-1">This is a private study room.</p>
+                    </div>
+                    <div className="p-8 bg-white">
+                        <div className="space-y-4">
+                            <div className="space-y-2 text-center">
+                                <Label className="text-slate-500 text-xs font-bold uppercase tracking-widest">Enter Study Code</Label>
+                                <Input
+                                    type="text"
+                                    value={joinCode}
+                                    onChange={e => { setJoinCode(e.target.value); setJoinError(""); }}
+                                    className="h-14 text-center text-2xl font-black tracking-[0.5em] rounded-2xl border-slate-200 focus:border-indigo-500 focus:ring-indigo-500"
+                                    placeholder="----"
+                                    autoFocus
+                                />
+                                {joinError && <p className="text-rose-500 text-xs font-bold">{joinError}</p>}
+                            </div>
+                            <Button onClick={verifyCode} className="w-full h-14 bg-indigo-600 hover:bg-indigo-700 rounded-2xl text-lg font-bold shadow-lg shadow-indigo-100">
+                                Join Session
+                            </Button>
+                        </div>
+                    </div>
+                </DialogContent>
+            </Dialog>
 
             {rooms.length === 0 ? (
                 <div className="text-center py-24 bg-white rounded-3xl border border-slate-100 shadow-sm">
@@ -301,24 +422,40 @@ export default function StudyRooms() {
                     {rooms.map(room => (
                         <button
                             key={room.$id}
-                            onClick={() => setActiveRoom(room)}
-                            className="bg-white rounded-2xl border border-slate-100 p-6 shadow-sm hover:shadow-lg hover:border-indigo-100 transition-all text-left group"
+                            onClick={() => handleEntryAttempt(room)}
+                            className="bg-white rounded-2xl border border-slate-100 p-6 shadow-sm hover:shadow-lg hover:border-indigo-100 transition-all text-left group relative overflow-hidden"
                         >
+                            {room.isPrivate && (
+                                <div className="absolute top-0 right-0 p-2">
+                                    <div className="bg-rose-50 p-1.5 rounded-lg">
+                                        <Lock className="w-3.5 h-3.5 text-rose-500" />
+                                    </div>
+                                </div>
+                            )}
                             <div className="flex items-start justify-between mb-3">
                                 <div className="w-10 h-10 bg-indigo-50 rounded-xl flex items-center justify-center group-hover:bg-indigo-100 transition-colors">
                                     <BookOpen className="w-5 h-5 text-indigo-600" />
                                 </div>
                                 {room.courseTag && (
-                                    <span className="text-[10px] font-black text-indigo-600 bg-indigo-50 px-2.5 py-1 rounded-lg uppercase">{room.courseTag}</span>
+                                    <span className={`text-[10px] font-black px-2.5 py-1 rounded-lg uppercase ${room.isPrivate ? "text-rose-600 bg-rose-50" : "text-indigo-600 bg-indigo-50"}`}>
+                                        {room.courseTag}
+                                    </span>
                                 )}
                             </div>
                             <h3 className="font-black text-slate-900 text-base leading-snug">{room.name}</h3>
+                            <p className="text-[10px] text-slate-400 font-bold mt-1 uppercase tracking-wide">By {room.createdByName}</p>
                             {room.description && (
                                 <p className="text-sm text-slate-400 mt-1 line-clamp-2">{room.description}</p>
                             )}
                             <div className="flex items-center gap-2 mt-4 pt-3 border-t border-slate-50">
-                                <MessageSquare className="w-3.5 h-3.5 text-slate-300 group-hover:text-indigo-400 transition-colors" />
-                                <span className="text-xs text-slate-400 font-medium">Enter Room →</span>
+                                {room.isPrivate ? (
+                                    <Unlock className="w-3.5 h-3.5 text-rose-400" />
+                                ) : (
+                                    <MessageSquare className="w-3.5 h-3.5 text-indigo-400" />
+                                )}
+                                <span className={`text-xs font-bold ${room.isPrivate ? "text-rose-500" : "text-indigo-500"}`}>
+                                    {room.isPrivate ? "Unlock & Enter →" : "Join Discussion →"}
+                                </span>
                             </div>
                         </button>
                     ))}
