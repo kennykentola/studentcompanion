@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import { databases, APPWRITE_CONFIG } from "@/lib/appwrite";
 import { ID, Query } from "appwrite";
-import { Plus, Trash2, Loader2, MapPin, Clock, ChevronLeft } from "lucide-react";
+import { Plus, Trash2, Loader2, MapPin, Clock, ChevronLeft, CalendarPlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -28,7 +28,7 @@ interface Schedule {
     location?: string;
 }
 
-const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
+const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 const TIMES = ["08:00", "09:00", "10:00", "11:00", "12:00", "13:00", "14:00", "15:00", "16:00", "17:00"];
 
 export default function Timetable() {
@@ -131,6 +131,31 @@ export default function Timetable() {
     }
 
     const localDateFromISO = (iso: string) => new Date(iso);
+
+    const today = new Date();
+    const todayName = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"][today.getDay()];
+    const currentHour = today.getHours();
+
+    const getCalendarLink = (s: Schedule) => {
+        const text = encodeURIComponent(s.title);
+        const location = encodeURIComponent(s.location || "");
+        const day = s.dayOfWeek;
+        const startDt = localDateFromISO(s.startTime);
+        const endDt = localDateFromISO(s.endTime);
+        const startH = startDt.getHours().toString().padStart(2, "0");
+        const startM = startDt.getMinutes().toString().padStart(2, "0");
+        const endH = endDt.getHours().toString().padStart(2, "0");
+        const endM = endDt.getMinutes().toString().padStart(2, "0");
+        // Use a representative next occurrence of that weekday
+        const dayIndexMap: Record<string, number> = { Sunday: 0, Monday: 1, Tuesday: 2, Wednesday: 3, Thursday: 4, Friday: 5, Saturday: 6 };
+        const targetDay = dayIndexMap[day];
+        const diff = (targetDay - today.getDay() + 7) % 7 || 7;
+        const nextDate = new Date(today); nextDate.setDate(today.getDate() + diff);
+        const dateStr = nextDate.toISOString().split("T")[0].replace(/-/g, "");
+        const start = `${dateStr}T${startH}${startM}00`;
+        const end = `${dateStr}T${endH}${endM}00`;
+        return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${text}&location=${location}&dates=${start}/${end}&recur=RRULE:FREQ=WEEKLY`;
+    };
 
     if (loading) {
         return <div className="flex justify-center items-center h-screen"><Loader2 className="animate-spin w-8 h-8 text-indigo-600" /></div>
@@ -239,66 +264,89 @@ export default function Timetable() {
                     <div className="overflow-x-auto">
                         <div className="min-w-[1000px]">
                             {/* Header Row */}
-                            <div className="grid grid-cols-6 border-b border-slate-100 bg-slate-50/50">
+                            <div className="grid grid-cols-8 border-b border-slate-100 bg-slate-50/50">
                                 <div className="p-6 text-center text-xs font-bold text-slate-400 uppercase tracking-wider border-r border-slate-100">
                                     Time
                                 </div>
                                 {DAYS.map(day => (
-                                    <div key={day} className="p-6 text-center text-sm font-bold text-slate-700 uppercase tracking-tight border-r border-slate-100 last:border-r-0">
+                                    <div key={day} className={`p-6 text-center text-sm font-bold uppercase tracking-tight border-r border-slate-100 last:border-r-0 transition-colors ${
+                                        day === todayName ? 'bg-indigo-50 text-indigo-700' : 'text-slate-700'
+                                    }`}>
                                         {day}
+                                        {day === todayName && <span className="block text-[9px] text-indigo-400 font-black mt-0.5 tracking-widest">TODAY</span>}
                                     </div>
                                 ))}
                             </div>
 
                             {/* Time Slots */}
                             <div className="bg-white">
-                                {TIMES.map(time => (
-                                    <div key={time} className="grid grid-cols-6 border-b border-slate-50 last:border-b-0 hover:bg-slate-50/30 transition-colors group">
-                                        <div className="p-6 text-xs font-medium text-slate-400 border-r border-slate-50 text-center flex items-center justify-center">
+                                {TIMES.map(time => {
+                                        const slotHour = parseInt(time.split(':')[0]);
+                                        const isCurrentHour = slotHour === currentHour;
+                                        return (
+                                    <div key={time} className={`grid grid-cols-8 border-b border-slate-50 last:border-b-0 transition-colors group ${
+                                        isCurrentHour ? 'bg-amber-50/60' : 'hover:bg-slate-50/30'
+                                    }`}>
+                                        <div className={`p-6 text-xs font-medium border-r border-slate-50 text-center flex items-center justify-center ${
+                                            isCurrentHour ? 'text-amber-600 font-black' : 'text-slate-400'
+                                        }`}>
+                                            {isCurrentHour && <span className="block w-2 h-2 bg-amber-400 rounded-full mr-2 animate-pulse" />}
                                             {time}
                                         </div>
                                         {DAYS.map(day => {
-                                            const schedule = getScheduleForSlot(day, time);
-                                            return (
-                                                <div key={`${day}-${time}`} className="p-2 border-r border-slate-50 min-h-[140px] relative transition-colors hover:bg-indigo-50/5">
-                                                    {schedule && (
-                                                        <div className="group/card relative h-full bg-white rounded-2xl p-4 border border-slate-100 shadow-sm hover:shadow-lg hover:shadow-indigo-100 hover:border-indigo-100 transition-all duration-300 flex flex-col justify-between overflow-hidden">
-                                                            <div className="absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b from-indigo-500 to-purple-500" />
+                                                const schedule = getScheduleForSlot(day, time);
+                                                return (
+                                                    <div key={`${day}-${time}`} className={`p-2 border-r border-slate-50 min-h-[140px] relative transition-colors ${
+                                                        day === todayName ? 'bg-indigo-50/20' : ''
+                                                    }`}>
+                                                            {schedule && (
+                                                            <div className="group/card relative h-full bg-white rounded-2xl p-4 border border-slate-100 shadow-sm hover:shadow-lg hover:shadow-indigo-100 hover:border-indigo-100 transition-all duration-300 flex flex-col justify-between overflow-hidden">
+                                                                <div className="absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b from-indigo-500 to-purple-500" />
 
-                                                            <div className="space-y-2">
-                                                                <h3 className="font-bold text-slate-900 text-sm leading-tight pr-6">{schedule.title}</h3>
+                                                                <div className="space-y-2">
+                                                                    <h3 className="font-bold text-slate-900 text-sm leading-tight pr-6">{schedule.title}</h3>
 
-                                                                {schedule.location && (
-                                                                    <div className="flex items-center gap-1.5 text-slate-500">
-                                                                        <MapPin className="h-3 w-3 text-indigo-500" />
-                                                                        <span className="text-xs font-medium">{schedule.location}</span>
-                                                                    </div>
-                                                                )}
-                                                            </div>
-
-                                                            <div className="flex items-center justify-between mt-3 pt-3 border-t border-slate-50">
-                                                                <div className="flex items-center gap-1.5 bg-slate-50 px-2 py-1 rounded-md">
-                                                                    <Clock className="h-3 w-3 text-slate-400" />
-                                                                    <span className="text-[10px] font-bold text-slate-500">
-                                                                        {format(new Date(schedule.startTime), "HH:mm")} - {format(new Date(schedule.endTime), "HH:mm")}
-                                                                    </span>
+                                                                    {schedule.location && (
+                                                                        <div className="flex items-center gap-1.5 text-slate-500">
+                                                                            <MapPin className="h-3 w-3 text-indigo-500" />
+                                                                            <span className="text-xs font-medium">{schedule.location}</span>
+                                                                        </div>
+                                                                    )}
                                                                 </div>
 
-                                                                <button
-                                                                    onClick={() => handleDeleteSchedule(schedule.$id)}
-                                                                    className="opacity-0 group-hover/card:opacity-100 transition-all text-slate-300 hover:text-red-500 transform hover:scale-110 active:scale-95"
-                                                                    title="Remove Class"
-                                                                >
-                                                                    <Trash2 className="h-4 w-4" />
-                                                                </button>
+                                                                <div className="flex items-center justify-between mt-3 pt-3 border-t border-slate-50">
+                                                                    <div className="flex items-center gap-1.5 bg-slate-50 px-2 py-1 rounded-md">
+                                                                        <Clock className="h-3 w-3 text-slate-400" />
+                                                                        <span className="text-[10px] font-bold text-slate-500">
+                                                                            {format(new Date(schedule.startTime), "HH:mm")} - {format(new Date(schedule.endTime), "HH:mm")}
+                                                                        </span>
+                                                                    </div>
+
+                                                                    <div className="flex items-center gap-1">
+                                                                        <button
+                                                                            onClick={() => window.open(getCalendarLink(schedule), '_blank')}
+                                                                            className="opacity-0 group-hover/card:opacity-100 transition-all text-slate-300 hover:text-indigo-500 transform hover:scale-110 active:scale-95"
+                                                                            title="Export to Google Calendar"
+                                                                        >
+                                                                            <CalendarPlus className="h-4 w-4" />
+                                                                        </button>
+                                                                        <button
+                                                                            onClick={() => handleDeleteSchedule(schedule.$id)}
+                                                                            className="opacity-0 group-hover/card:opacity-100 transition-all text-slate-300 hover:text-red-500 transform hover:scale-110 active:scale-95"
+                                                                            title="Remove Class"
+                                                                        >
+                                                                            <Trash2 className="h-4 w-4" />
+                                                                        </button>
+                                                                    </div>
+                                                                </div>
                                                             </div>
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            );
-                                        })}
+                                                        )}
+                                                    </div>
+                                                );
+                                            })}
                                     </div>
-                                ))}
+                                        );
+                                    })}
                             </div>
                         </div>
                     </div>

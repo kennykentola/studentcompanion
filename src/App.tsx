@@ -20,6 +20,11 @@ import DirectMessage from "@/pages/DirectMessage";
 import Privacy from "@/pages/Privacy";
 import Terms from "@/pages/Terms";
 import Disclaimer from "@/pages/Disclaimer";
+import Flashcards from "@/pages/Flashcards";
+import Resources from "@/pages/Resources";
+import StudyRooms from "@/pages/StudyRooms";
+import CourseReviews from "@/pages/CourseReviews";
+import Budget from "@/pages/Budget";
 
 function App() {
   return (
@@ -45,6 +50,11 @@ function App() {
               <Route path="/privacy" element={<Privacy />} />
               <Route path="/terms" element={<Terms />} />
               <Route path="/disclaimer" element={<Disclaimer />} />
+              <Route path="/flashcards" element={<Flashcards />} />
+              <Route path="/resources" element={<Resources />} />
+              <Route path="/study-rooms" element={<StudyRooms />} />
+              <Route path="/reviews" element={<CourseReviews />} />
+              <Route path="/budget" element={<Budget />} />
             </Route>
           </Route>
 

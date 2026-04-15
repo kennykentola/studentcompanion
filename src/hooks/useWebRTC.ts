@@ -17,6 +17,7 @@ export const useWebRTC = (currentUserId: string | undefined, currentUserName: st
     const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
     const [connectionState, setConnectionState] = useState<'idle' | 'calling' | 'connected' | 'ended'>('idle');
 
+    const [activePeerId, setActivePeerId] = useState<string | null>(null);
     const localStreamRef = useRef<MediaStream | null>(null);
     const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
 
@@ -41,6 +42,7 @@ export const useWebRTC = (currentUserId: string | undefined, currentUserName: st
         setConnectionState('idle');
         setRemoteStream(null);
         setIncomingCall(null);
+        setActivePeerId(null);
     }, []);
 
     useEffect(() => {
@@ -75,6 +77,7 @@ export const useWebRTC = (currentUserId: string | undefined, currentUserName: st
 
     const initiateCall = async (targetUserId: string) => {
         setConnectionState('calling');
+        setActivePeerId(targetUserId);
         setCallActive(true);
 
         try {
@@ -118,6 +121,9 @@ export const useWebRTC = (currentUserId: string | undefined, currentUserName: st
     const acceptCall = async () => {
         if (!incomingCall || !currentUserId) return;
 
+        const callerId = incomingCall.callerId;
+        setActivePeerId(callerId);
+
         try {
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
             localStreamRef.current = stream;
@@ -131,7 +137,7 @@ export const useWebRTC = (currentUserId: string | undefined, currentUserName: st
 
             pc.onicecandidate = (event) => {
                 if (event.candidate) {
-                    sendSignal('ice-candidate', event.candidate, incomingCall.callerId);
+                    sendSignal('ice-candidate', event.candidate, callerId);
                 }
             };
 
@@ -146,7 +152,7 @@ export const useWebRTC = (currentUserId: string | undefined, currentUserName: st
             // Create Answer
             const answer = await pc.createAnswer();
             await pc.setLocalDescription(answer);
-            await sendSignal('answer', answer, incomingCall.callerId);
+            await sendSignal('answer', answer, callerId);
 
             setCallActive(true);
             setIncomingCall(null);
@@ -165,29 +171,22 @@ export const useWebRTC = (currentUserId: string | undefined, currentUserName: st
     };
 
     const handleSignalMessage = async (message: any) => {
-        console.log(`[WebRTC] Received potential signal from ${message.username}:`, message.content?.substring(0, 50));
-        // No longer returning early if userId === currentUserId to allow multi-tab testing
-
+        console.log(`[WebRTC] Received potential signal from ${message.username}`);
+        
         let signal: any;
         try {
-            // Check if body is a JSON string containing our signal structure
             if (message.content && message.content.startsWith('{')) {
                 signal = JSON.parse(message.content);
             }
         } catch { return; }
 
-        // Must be a signal targeted at us
-        if (!signal || !signal.type || signal.targetUserId !== currentUserId) {
-            if (signal) console.log(`[WebRTC] Signal ignored: Target ${signal.targetUserId} doesn't match Current ${currentUserId}`);
-            return;
-        }
+        if (!signal || !signal.type || signal.targetUserId !== currentUserId) return;
 
         console.log(`[WebRTC] Processing signal '${signal.type}' from ${signal.senderName}`);
 
         try {
             switch (signal.type) {
                 case 'offer':
-                    // Verify we aren't already in a call
                     if (connectionState === 'idle') {
                         setIncomingCall({
                             callerId: signal.senderId,
@@ -224,11 +223,9 @@ export const useWebRTC = (currentUserId: string | undefined, currentUserName: st
         acceptCall,
         rejectCall,
         endCall: () => {
-            // Notify other peer we are ending
-            if (incomingCall) rejectCall();
-            // If we are in a call, we need to know who the other peer is to send 'end-call'
-            // For simplicity, we just clean up locally and relies on connection state change source 
-            // sending the signal is tricky without tracking the 'activePeerId'
+            if (activePeerId) {
+                sendSignal('end-call', {}, activePeerId);
+            }
             cleanupCall();
         },
         handleSignalMessage,

@@ -3,6 +3,7 @@ import { useState } from "react";
 import { Sidebar } from "./Sidebar";
 import { Header } from "./Header";
 import { useAuth } from "@/context/AuthContext";
+import { DeadlineNotifier } from "./DeadlineNotifier";
 
 export default function Layout() {
     const { loading } = useAuth();
@@ -29,6 +30,7 @@ export default function Layout() {
                 {/* Offset content for sidebar on desktop */}
                 <Header onMenuClick={() => setMobileMenuOpen(true)} />
                 <main className="flex-1 p-4 md:p-6 md:pl-72 pt-6">
+                    <DeadlineNotifier />
                     <Outlet />
                 </main>
             </div>

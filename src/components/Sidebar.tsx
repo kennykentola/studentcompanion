@@ -8,7 +8,13 @@ import {
     MessageSquare,
     Settings,
     LogOut,
-    Calculator
+    Calculator,
+    Brain,
+    BookMarked,
+    Users,
+    Star,
+    Wallet,
+    X
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 
@@ -19,10 +25,15 @@ const sidebarItems = [
     { icon: GraduationCap, label: "Grades", href: "/grades" },
     { icon: Calculator, label: "Calculator", href: "/calculator" },
     { icon: MessageSquare, label: "Chat", href: "/chat" },
-    { icon: Settings, label: "Settings", href: "/settings" },
 ];
 
-import { X } from "lucide-react";
+const studyItems = [
+    { icon: Brain, label: "Flashcards", href: "/flashcards" },
+    { icon: BookMarked, label: "Resources", href: "/resources" },
+    { icon: Users, label: "Study Rooms", href: "/study-rooms" },
+    { icon: Star, label: "Course Reviews", href: "/reviews" },
+    { icon: Wallet, label: "Budget", href: "/budget" },
+];
 
 interface SidebarProps {
     mobileMenuOpen?: boolean;
@@ -65,6 +76,44 @@ export function Sidebar({ mobileMenuOpen, onClose }: SidebarProps) {
                         {item.label}
                     </Link>
                 ))}
+
+                {/* Study Tools Section */}
+                <div className="pt-4 pb-1">
+                    <p className="px-3 text-[10px] font-black text-muted-foreground/50 uppercase tracking-widest mb-2">Study Tools</p>
+                </div>
+                {studyItems.map((item) => (
+                    <Link
+                        key={item.href}
+                        to={item.href}
+                        onClick={onClose}
+                        className={cn(
+                            "flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors",
+                            pathname === item.href
+                                ? "bg-primary text-primary-foreground"
+                                : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                        )}
+                    >
+                        <item.icon className="h-4 w-4" />
+                        {item.label}
+                    </Link>
+                ))}
+
+                {/* Settings at bottom of list */}
+                <div className="pt-2">
+                    <Link
+                        to="/settings"
+                        onClick={onClose}
+                        className={cn(
+                            "flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors",
+                            pathname === "/settings"
+                                ? "bg-primary text-primary-foreground"
+                                : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                        )}
+                    >
+                        <Settings className="h-4 w-4" />
+                        Settings
+                    </Link>
+                </div>
             </nav>
 
             <div className="p-4 border-t">
