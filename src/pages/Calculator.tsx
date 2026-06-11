@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { Plus, Trash2, RotateCcw } from "lucide-react";
+import { Link } from "react-router-dom";
+import { Plus, Trash2, RotateCcw, GraduationCap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -60,11 +61,17 @@ export default function Calculator() {
 
     return (
         <div className="space-y-6">
-            <div className="flex flex-col gap-2">
-                <h1 className="text-3xl font-bold tracking-tight">Manual CGPA Calculator</h1>
-                <p className="text-muted-foreground">
-                    Calculate your semester or cumulative GPA using the UI (4.0) Standard.
-                </p>
+            <div className="flex flex-row justify-between items-start">
+                <div className="flex flex-col gap-2">
+                    <h1 className="text-3xl font-bold tracking-tight">Manual CGPA Calculator</h1>
+                    <p className="text-muted-foreground">
+                        Calculate your semester or cumulative GPA using the UI (4.0) Standard.
+                    </p>
+                </div>
+                <Link className="flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors bg-primary text-primary-foreground" to="/grades" data-discover="true">
+                    <GraduationCap className="h-4 w-4" />
+                    Grades
+                </Link>
             </div>
 
             <div className="grid gap-6 md:grid-cols-3">

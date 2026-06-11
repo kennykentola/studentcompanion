@@ -26,6 +26,8 @@ import Resources from "@/pages/Resources";
 import StudyRooms from "@/pages/StudyRooms";
 import CourseReviews from "@/pages/CourseReviews";
 import Budget from "@/pages/Budget";
+import Reminders from "@/pages/Reminders";
+import Notifications from "@/pages/Notifications";
 
 function App() {
   return (
@@ -57,6 +59,8 @@ function App() {
                 <Route path="/study-rooms" element={<StudyRooms />} />
                 <Route path="/reviews" element={<CourseReviews />} />
                 <Route path="/budget" element={<Budget />} />
+                <Route path="/reminders" element={<Reminders />} />
+                <Route path="/notifications" element={<Notifications />} />
               </Route>
             </Route>
 

@@ -1,0 +1,458 @@
+CHAPTER THREE
+SYSTEM DESIGN AND IMPLEMENTATION
+
+3.1 Introduction
+
+This chapter presents the system design of the Student Companion application.
+The application is a student support platform built with React and Appwrite.
+It combines academic management, peer communication, collaboration tools, and
+personal productivity features in one web application.
+
+The design covers the major modules implemented in the system:
+1. Authentication and profile management
+2. Academic task management
+3. Timetable management
+4. Grade and CGPA tracking
+5. Real-time chat and direct messaging
+6. Help desk questions and answers
+7. Flashcards for revision
+8. Resource library
+9. Study room creation and group discussion
+10. Course review sharing
+11. Budget tracking
+12. Notification handling
+13. Voice call signaling using WebRTC
+
+3.2 System Architecture
+
+The Student Companion system uses a client-server architecture.
+The client side is implemented with React and TypeScript, while the backend
+services are provided by Appwrite. Appwrite handles:
+1. Authentication
+2. Database storage
+3. File storage
+4. Real-time events
+
+3.2.1 System Architecture Diagram
+
+Text System Architecture:
+
+ +-------------------+        +-------------------------+
+ |   Student/User    |        |  Other Student Peers    |
+ +---------+---------+        +------------+------------+
+           |                               |
+           | uses the web app              | receive chats, DMs,
+           v                               | questions, and call signals
+ +---------------------------------------------------------------+
+ |                   Student Companion Frontend                  |
+ |  React + TypeScript + Router + UI Components                  |
+ |                                                               |
+ |  Pages: Home, Dashboard, Tasks, Timetable, Grades, Chat,      |
+ |  Flashcards, Resources, Study Rooms, Reviews, Budget, Settings|
+ +-----------------------+-----------------------+----------------+
+                         |                       |
+                         | API calls             | file uploads
+                         v                       v
+              +-------------------+     +------------------------+
+              | Appwrite Database |     |   Appwrite Storage     |
+              |  - profiles       |     |  - avatars             |
+              |  - tasks          |     |  - resource files      |
+              |  - grades         |     |  - voice notes         |
+              |  - schedules      |     +------------------------+
+              |  - messages       |
+              |  - notifications  |     +------------------------+
+              |  - help_questions |---->| Appwrite Real-time     |
+              |  - help_answers   |     | Events / Subscriptions |
+              |  - flashcards     |     +------------------------+
+              |  - resources      |
+              |  - study_rooms    |     +------------------------+
+              |  - course_reviews |<----| Appwrite Authentication|
+              |  - budget_entries |     |   (login/register)     |
+              +-------------------+     +------------------------+
+
+The architecture can be summarized as:
+1. The student interacts with the React user interface.
+2. The frontend sends requests to Appwrite for authentication and data access.
+3. Files such as avatars, attachments, and voice notes are stored in Appwrite Storage.
+4. Real-time subscriptions update chat messages and notifications instantly.
+5. Peer-to-peer voice calls use WebRTC signaling through the messages collection.
+
+The application stores user-generated information such as tasks, grades,
+messages, profiles, flashcards, resources, study rooms, course reviews,
+budget entries, questions, and answers in Appwrite collections.
+
+3.3 Functional Requirements
+
+The system supports the following major functions:
+1. Register and log in users.
+2. Create and update user profiles.
+3. Add, edit, complete, and delete academic tasks.
+4. Create weekly timetable entries.
+5. Record grades and calculate academic performance.
+6. Send messages in public chat rooms and direct messages.
+7. Upload files and voice notes in chat.
+8. Ask and answer academic questions.
+9. Create flashcards and mark them as known.
+10. Upload notes, past papers, and study links as resources.
+11. Create and join study rooms.
+12. Write and view course reviews.
+13. Track income and expenses.
+14. Receive notifications for important events.
+15. Make voice calls using WebRTC signaling.
+
+3.4 Use Case Diagram
+
+The main actor in the system is the Student.
+Secondary supporting services include Appwrite Authentication, Appwrite
+Database, Appwrite Storage, and WebRTC peers.
+
+Text Use Case Diagram:
+
+                   +------------------------------------+
+                   |        Student Companion App       |
+                   +------------------------------------+
+                                ^
+                                |
+                               Student
+                                |
+   ------------------------------------------------------------------------
+   |            |             |              |             |              |
+Register/Login  Manage Profile Manage Tasks   Manage Chat   Use Help Desk  Track Budget
+   |            |             |              |             |              |
+   |            |             |              |             |              |
+   v            v             v              v             v              v
+Authentication  Update avatar Create/Update   Send/Receive  Ask/Answer     Add Income/
+Service         Edit bio      Complete task   Messages      Questions      Expense
+                              Set reminders   Voice notes   Search contacts View balance
+
+Additional use cases:
+1. Manage timetable
+2. Record grades
+3. Create flashcards
+4. Upload resources
+5. Create/join study rooms
+6. Write course reviews
+7. Receive notifications
+8. Initiate and accept voice calls
+
+3.5 Data Flow Diagram
+
+3.5.1 DFD Level 0
+
+External entities:
+1. Student
+2. Appwrite Authentication Service
+3. Appwrite Database and Storage
+4. Other Student Peers
+
+Process:
+1. Student Companion System
+
+Text DFD Level 0:
+
+ Student  <------->  [ Student Companion System ]  <------->  Appwrite Auth
+    |                          |                              Service
+    |                          |
+    |                          +------------------------------> Appwrite DB
+    |                          |                               and Storage
+    |                          |
+    |                          +------------------------------> Other Peers
+    |
+    +---- Sends login details, profile data, tasks, messages, grades,
+          resources, budget entries, and support requests
+
+    <---- Receives dashboard data, notifications, chat replies,
+          timetable data, academic summaries, and file links
+
+3.5.2 DFD Level 1
+
+Process 1: Authentication and Profile Management
+1. Student submits registration or login data.
+2. Appwrite Authentication validates the credentials.
+3. Profile information is stored in the profiles collection.
+4. Avatar files are stored in Appwrite Storage.
+
+Process 2: Academic Management
+1. Student creates tasks, schedules, grades, flashcards, and budget entries.
+2. The system stores records in the related collections.
+3. Dashboard modules read the stored data and display summaries.
+
+Process 3: Communication and Collaboration
+1. Student sends messages in chat rooms or direct messages.
+2. Messages are stored in the messages collection.
+3. Help questions and answers are stored in help_questions and help_answers.
+4. Study room conversations use the messages collection as well.
+5. WebRTC call signals are exchanged through the messages collection.
+
+Process 4: Resource and Review Management
+1. Student uploads notes, past papers, and file attachments.
+2. Files are stored in Appwrite Storage.
+3. Metadata is stored in the resources collection.
+4. Course reviews are stored in the course_reviews collection.
+
+Process 5: Notification Management
+1. System creates notifications for new messages and important updates.
+2. Notifications are saved in the notifications collection.
+3. The header component reads unread notifications in real time.
+
+Text DFD Level 1:
+
+ Student
+   |
+   +--> [1.0 Authentication and Profile Management] ---> profiles, storage
+   |
+   +--> [2.0 Academic Management] ---------------------> tasks, grades,
+   |                                                     schedules,
+   |                                                     flashcards,
+   |                                                     budget_entries
+   |
+   +--> [3.0 Communication and Collaboration] ---------> messages,
+   |                                                     help_questions,
+   |                                                     help_answers
+   |
+   +--> [4.0 Resource and Review Management] ----------> resources,
+   |                                                     course_reviews,
+   |                                                     storage
+   |
+   +--> [5.0 Notification Management] ------------------> notifications
+
+3.6 Entity Relationship Diagram
+
+Text ERD:
+
+ [User]
+   |1
+   |---------------------- 1
+ [UserProfile]
+
+ [User]
+   |1
+   |---------------------- *
+ [Task]
+
+ [User]
+   |1
+   |---------------------- *
+ [Grade]
+
+ [User]
+   |1
+   |---------------------- *
+ [Schedule]
+
+ [User]
+   |1
+   |---------------------- *
+ [Flashcard]
+
+ [User]
+   |1
+   |---------------------- *
+ [Resource]
+
+ [User]
+   |1
+   |---------------------- *
+ [CourseReview]
+
+ [User]
+   |1
+   |---------------------- *
+ [BudgetEntry]
+
+ [User]
+   |1
+   |---------------------- *
+ [Notification]
+
+ [User]
+   |1
+   |---------------------- *
+ [Message]
+
+ [User]
+   |1
+   |---------------------- *
+ [StudyRoom]
+
+ [StudyRoom]
+   |1
+   |---------------------- *
+ [Message]
+
+ [HelpQuestion]
+   |1
+   |---------------------- *
+ [HelpAnswer]
+
+ Relationship Notes:
+1. A user can own one profile.
+2. A user can create many tasks, grades, schedules, flashcards, resources,
+   reviews, budget entries, notifications, messages, and study rooms.
+3. A help question can have many help answers.
+4. Messages are linked to a roomId value, which may represent a public room,
+   a direct message conversation, or a study room.
+
+3.7 Relational Model Diagram
+
+The relational model expresses the logical tables used in the application.
+Primary keys are marked as PK and foreign keys as FK.
+
+1. USERS
+   userId PK
+   name
+   email
+   passwordHash
+   createdAt
+
+2. PROFILES
+   profileId PK
+   userId FK -> USERS.userId
+   matricNumber
+   nickname
+   department
+   faculty
+   university
+   avatarId
+   bio
+   email
+
+3. TASKS
+   taskId PK
+   userId FK -> USERS.userId
+   title
+   category
+   dueDate
+   status
+   priority
+   content
+
+4. GRADES
+   gradeId PK
+   userId FK -> USERS.userId
+   courseName
+   grade
+   creditUnits
+   semester
+
+5. SCHEDULES
+   scheduleId PK
+   userId FK -> USERS.userId
+   title
+   dayOfWeek
+   startTime
+   endTime
+   location
+
+6. MESSAGES
+   messageId PK
+   userId FK -> USERS.userId
+   username
+   roomId
+   body
+   fileId
+   fileName
+   attachments
+
+7. NOTIFICATIONS
+   notificationId PK
+   userId FK -> USERS.userId
+   message
+   isRead
+   createdAt
+
+8. HELP_QUESTIONS
+   questionId PK
+   userId FK -> USERS.userId
+   title
+   content
+   courseId
+   author
+   resolved
+   createdAt
+
+9. HELP_ANSWERS
+   answerId PK
+   questionId FK -> HELP_QUESTIONS.questionId
+   userId FK -> USERS.userId
+   author
+   authorLevel
+   content
+   votes
+   createdAt
+
+10. FLASHCARDS
+    flashcardId PK
+    userId FK -> USERS.userId
+    question
+    answer
+    courseTag
+    known
+
+11. RESOURCES
+    resourceId PK
+    userId FK -> USERS.userId
+    title
+    type
+    courseTag
+    fileId
+    url
+    description
+
+12. STUDY_ROOMS
+    roomId PK
+    createdBy FK -> USERS.userId
+    name
+    courseTag
+    description
+    createdByName
+    isPrivate
+    roomCode
+
+13. COURSE_REVIEWS
+    reviewId PK
+    userId FK -> USERS.userId
+    username
+    courseCode
+    courseName
+    rating
+    review
+    createdAt
+
+14. BUDGET_ENTRIES
+    entryId PK
+    userId FK -> USERS.userId
+    title
+    amount
+    type
+    category
+    date
+
+3.8 Database Design Explanation
+
+The system uses separate collections because each feature has a different
+purpose and data structure. This makes the application easier to maintain and
+improves query performance.
+
+1. The profiles collection stores identity and academic background.
+2. The tasks collection stores assignment and deadline data.
+3. The grades collection stores academic results and supports CGPA analysis.
+4. The schedules collection stores timetable information.
+5. The messages collection stores chat data, direct messages, and WebRTC
+   signaling payloads.
+6. The notifications collection stores unread and read system alerts.
+7. The help collections store academic questions and community answers.
+8. The flashcards collection supports revision and study mode.
+9. The resources collection stores learning materials and external links.
+10. The study_rooms collection stores collaborative room information.
+11. The course_reviews collection stores student feedback on courses.
+12. The budget_entries collection stores income and expense records.
+
+3.9 Summary
+
+This chapter presented the design of the Student Companion application using
+text-based diagrams and database models. The use case diagram described the
+main user interactions, the DFD showed how data moves through the system, the
+ERD described the relationships among entities, and the relational model
+listed the database tables and fields. Together, these designs provide a clear
+foundation for the implementation of the application.
