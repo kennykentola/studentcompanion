@@ -28,6 +28,13 @@ import CourseReviews from "@/pages/CourseReviews";
 import Budget from "@/pages/Budget";
 import Reminders from "@/pages/Reminders";
 import Notifications from "@/pages/Notifications";
+import AdminRoute from "@/components/AdminRoute";
+import AdminLayout from "@/components/AdminLayout";
+import AdminDashboard from "@/pages/admin/AdminDashboard";
+import CampusManager from "@/pages/admin/CampusManager";
+import IssueResolution from "@/pages/admin/IssueResolution";
+import CourseRegistration from "@/pages/CourseRegistration";
+import ReportIssue from "@/pages/ReportIssue";
 
 function App() {
   return (
@@ -61,6 +68,17 @@ function App() {
                 <Route path="/budget" element={<Budget />} />
                 <Route path="/reminders" element={<Reminders />} />
                 <Route path="/notifications" element={<Notifications />} />
+                <Route path="/course-registration" element={<CourseRegistration />} />
+                <Route path="/report-issue" element={<ReportIssue />} />
+              </Route>
+              
+              {/* Admin Routes */}
+              <Route element={<AdminRoute />}>
+                <Route element={<AdminLayout />}>
+                  <Route path="/admin/dashboard" element={<AdminDashboard />} />
+                  <Route path="/admin/campus" element={<CampusManager />} />
+                  <Route path="/admin/issues" element={<IssueResolution />} />
+                </Route>
               </Route>
             </Route>
 

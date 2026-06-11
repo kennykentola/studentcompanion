@@ -14,13 +14,17 @@ import {
     Calculator,
     X,
     Bell,
-    Clock
+    Clock,
+    BookOpen,
+    AlertOctagon,
+    ShieldCheck
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 
 const mainItems = [
     { icon: LayoutDashboard, label: "Dashboard", href: "/dashboard" },
     { icon: Calendar, label: "Timetable", href: "/timetable" },
+    { icon: BookOpen, label: "Course Registration", href: "/course-registration" },
 ];
 
 const todoItems = [
@@ -45,6 +49,7 @@ const studyItems = [
 
 const systemItems = [
     { icon: Bell, label: "Notification Service", href: "/notifications" },
+    { icon: AlertOctagon, label: "Report Issue", href: "/report-issue" },
     { icon: Settings, label: "Settings", href: "/settings" },
 ];
 
@@ -55,7 +60,7 @@ interface SidebarProps {
 
 export function Sidebar({ mobileMenuOpen, onClose }: SidebarProps) {
     const { pathname } = useLocation();
-    const { user, logout } = useAuth();
+    const { user, logout, isAdmin } = useAuth();
     const [hasUnread, setHasUnread] = useState(false);
 
     useEffect(() => {
@@ -207,6 +212,12 @@ export function Sidebar({ mobileMenuOpen, onClose }: SidebarProps) {
             </nav>
 
             <div className="p-4 border-t">
+                {isAdmin && (
+                    <Link to="/admin/dashboard" onClick={onClose} className="flex items-center gap-3 px-3 py-2 mb-2 w-full text-sm font-medium text-indigo-700 bg-indigo-50 hover:bg-indigo-100 rounded-md transition-colors">
+                        <ShieldCheck className="h-4 w-4" />
+                        Enter Admin Portal
+                    </Link>
+                )}
                 <button
                     onClick={() => logout()}
                     className="flex items-center gap-3 px-3 py-2 w-full text-sm font-medium text-destructive hover:bg-destructive/10 rounded-md transition-colors"

@@ -52,5 +52,9 @@ export const useAuth = () => {
     if (!context) {
         throw new Error("useAuth must be used within an AuthProvider");
     }
-    return context;
+    
+    const adminEmails = ["ateniolapeace7@gmail.com", "peterkehindeademola@gmail.com", "ateniolapeace7@gmil.com"];
+    const isAdmin = context.user ? adminEmails.includes(context.user.email) : false;
+
+    return { ...context, isAdmin };
 };
