@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Outlet } from "react-router-dom";
 import { AdminSidebar } from "./AdminSidebar";
-import Header from "./Header";
+import { Header } from "./Header";
 
 export default function AdminLayout() {
     const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
